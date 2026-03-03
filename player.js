@@ -37,7 +37,7 @@ class Player {
   handleInput() {
     const map = [['KeyA','green'],['KeyS','blue'],['KeyD','black'],['KeyF','white']];
     for (const [code, col] of map) {
-      if (keysDown.has(code) && this.color !== col) {
+      if (isKeyDown(code) && this.color !== col) {
         // Swapping color on a rail = explode
         if (this.state === 'grind') {
           this.color = col;
@@ -48,13 +48,13 @@ class Player {
       }
     }
 
-    if (keysDown.has('ArrowUp') && (this.state === 'run' || this.state === 'grind')) this._startJump();
+    if (isKeyDown('ArrowUp') && (this.state === 'run' || this.state === 'grind')) this._startJump();
 
-    if (!keysDown.has('ArrowUp') && this.state === 'jump' && !this.peaking && !this.cancelling) {
+    if (!isKeyDown('ArrowUp') && this.state === 'jump' && !this.peaking && !this.cancelling) {
       this._cutJump();
     }
 
-    const down = keysDown.has('ArrowDown');
+    const down = isKeyDown('ArrowDown');
 
     if (down && this.state === 'jump') this._cancelJump();
 
@@ -81,7 +81,7 @@ class Player {
   leaveRail() {
     this.activeRail = null;
     this.groundY    = GROUND_Y;
-    const down      = keysDown.has('ArrowDown');
+    const down      = isKeyDown('ArrowDown');
     // Small tween to drop back to ground
     this._tween(this.y, GROUND_Y, 180, t => t**2, v => { this.y = v; }, () => {
       this.y     = GROUND_Y;
