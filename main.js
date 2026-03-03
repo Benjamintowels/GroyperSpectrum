@@ -165,9 +165,15 @@ function loop(ts) {
     return;
   }
 
-  // Only speed up when running below ~60fps (e.g. mobile); leave desktop at 60fps unchanged
+  // Frame-rate: only speed up when below ~60fps so desktop stays unchanged
   const targetFrameMs = 1000 / 60;
-  const scale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
+  const frameScale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
+  // Scale speed by display size so apparent speed is consistent across resolutions and window sizes
+  const rect = canvas.getBoundingClientRect();
+  const displayScale = rect.width > 0
+    ? Math.min(canvas.width / rect.width, 4)
+    : 1;
+  const scale = frameScale * displayScale;
 
   if (!gameOver) {
     frameCount++;
