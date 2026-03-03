@@ -165,7 +165,12 @@ class Obstacle {
     if (this.type === 'barrel')  return player.bottom > this.top + 4 && player.top < this.bottom;
     if (this.type === 'ceiling') return player.top < this.bottom + 12 && player.bottom > this.top;
     if (this.type === 'gate')    return player.bottom > this.top + 4 && player.top < this.bottom;
-    if (this.type === 'rail')    return player.bottom >= this.top && player.bottom <= this.top + 16 && player.state === 'jump';
+    // Rail: overlap when landing on it (jump + in zone) OR when running into it (on ground + hOv)
+    if (this.type === 'rail') {
+      const landingOnRail = player.state === 'jump' && player.bottom >= this.top && player.bottom <= this.top + 16;
+      const runningIntoRail = (player.state === 'run' || player.state === 'duck') && player.bottom >= GROUND_Y - 2;
+      return landingOnRail || runningIntoRail;
+    }
     if (this.type === 'gap')     return (player.state === 'run' || player.state === 'duck') && player.bottom >= GROUND_Y - 2;
     return false;
   }
