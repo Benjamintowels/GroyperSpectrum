@@ -230,7 +230,7 @@ class ObstacleManager {
     return rightmost;
   }
 
-  update(frameCount, score = 0) {
+  update(frameCount, score = 0, scale = 1) {
     if (score >= 60) {
       this.gateSection     = false;
       this.gateSectionLeft = 0;
@@ -244,7 +244,7 @@ class ObstacleManager {
       this.gateSection25Done = true;
     }
 
-    this.spawnTimer++;
+    this.spawnTimer += scale;
 
     if (this.spawnTimer >= this.interval) {
       this.spawnTimer = 0;
@@ -307,7 +307,7 @@ class ObstacleManager {
       this.difficulty = Math.min(10, Math.floor(this.obstacleCount / 5));
     }
 
-    for (const o of this.obstacles) o.update(this.speed);
+    for (const o of this.obstacles) o.update(this.speed * scale);
     this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
   }
 

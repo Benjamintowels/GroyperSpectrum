@@ -165,12 +165,16 @@ function loop(ts) {
     return;
   }
 
+  // Only speed up when running below ~60fps (e.g. mobile); leave desktop at 60fps unchanged
+  const targetFrameMs = 1000 / 60;
+  const scale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
+
   if (!gameOver) {
     frameCount++;
     player.handleInput();
     player.update(dt);
-    obsMgr.update(frameCount, score);
-    bg.update(obsMgr.speed);
+    obsMgr.update(frameCount, score, scale);
+    bg.update(obsMgr.speed * scale);
     checkCollisions();
 
     // Award points for any obstacle that has fully passed the player
