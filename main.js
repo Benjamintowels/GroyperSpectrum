@@ -14,6 +14,7 @@ let lastTime   = 0;
 let gameOver   = false;
 let score      = 0;
 let highScore  = Number(localStorage.getItem('gs_highscore') || 0);
+let startScreen = true;
 
 function checkCollisions() {
   for (const obs of obsMgr.obstacles) {
@@ -61,11 +62,25 @@ function loop(ts) {
   const dt = Math.min(ts - lastTime, 50);
   lastTime = ts;
 
+  if (startScreen) {
+    ctx.clearRect(0, 0, 800, 400);
+    bg.draw(ctx);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, 800, 400);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 1.5rem monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Press any key to start', 400, 200);
+    ctx.textAlign = 'left';
+    requestAnimationFrame(loop);
+    return;
+  }
+
   if (!gameOver) {
     frameCount++;
     player.handleInput();
     player.update(dt);
-    obsMgr.update(frameCount);
+    obsMgr.update(frameCount, score);
     bg.update(obsMgr.speed);
     checkCollisions();
 
@@ -87,7 +102,7 @@ function loop(ts) {
   ctx.fillStyle = '#fff';
   ctx.font      = 'bold 16px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`SCORE: ${score}`, 16, 28);
+  ctx.fillText(`SCORE: ${score}${score >= 50 ? ' ★' : ''}`, 16, 28);
   ctx.fillText(`BEST:  ${highScore}`, 16, 50);
 
   if (gameOver) {
@@ -104,6 +119,11 @@ function loop(ts) {
 }
 
 window.addEventListener('keydown', e => {
+  if (startScreen) {
+    startScreen = false;
+    keysDown.clear();
+    return;
+  }
   if (e.code === 'KeyR' && gameOver) {
     gameOver = false;
     frameCount = 0;

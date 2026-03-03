@@ -49,6 +49,13 @@ class Obstacle {
       this.h = RAIL_HEIGHT;
       this.y = RAIL_Y;
     }
+
+    if (type === 'gap') {
+      // Twice barrel width (64) or half that (32)
+      this.w = Math.random() < 0.5 ? 64 : 32;
+      this.h = 50; // visual depth of hole
+      this.y = GROUND_Y;
+    }
   }
 
   get left()   { return this.x; }
@@ -127,10 +134,21 @@ class Obstacle {
       ctx.strokeRect(this.x, this.y, this.w, this.h);
     }
 
+    if (this.type === 'gap') {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(this.x, this.y, this.w, this.h);
+      ctx.fillStyle = '#0d0d0d';
+      ctx.fillRect(this.x + 2, this.y + 2, this.w - 4, this.h - 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(this.x, this.y, this.w, this.h);
+    }
+
     // Debug label
     const label = this.type === 'barrel' ? 'JMP'
                 : this.type === 'ceiling' ? 'DUK'
                 : this.type === 'gate'    ? 'CLR'
+                : this.type === 'gap'     ? 'GAP'
                 : 'RAIL';
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(this.x + this.w / 2 - 14, this.y - 20, 28, 14);
@@ -148,6 +166,7 @@ class Obstacle {
     if (this.type === 'ceiling') return player.top < this.bottom + 12 && player.bottom > this.top;
     if (this.type === 'gate')    return player.bottom > this.top + 4 && player.top < this.bottom;
     if (this.type === 'rail')    return player.bottom >= this.top && player.bottom <= this.top + 16 && player.state === 'jump';
+    if (this.type === 'gap')     return (player.state === 'run' || player.state === 'duck') && player.bottom >= GROUND_Y - 2;
     return false;
   }
 
@@ -163,6 +182,7 @@ class Obstacle {
       return colorOk;
     }
     if (this.type === 'rail') return player.state === 'jump' && colorOk;
+    if (this.type === 'gap')  return false; // touching gap always kills
     return false;
   }
 }
@@ -171,13 +191,17 @@ class ObstacleManager {
   constructor() { this.reset(); }
 
   reset() {
-    this.obstacles      = [];
-    this.spawnTimer     = 0;
-    this.obstacleCount  = 0;
-    this.difficulty     = 0;
-    this.lastRailRight  = -999;  // tracks where the last rail ended
-    this.lastRailColor  = null;  // tracks last rail color
-    this.activeRailEnd  = -999;  // x position where current rail ends
+    this.obstacles       = [];
+    this.spawnTimer      = 0;
+    this.obstacleCount   = 0;
+    this.difficulty      = 0;
+    this.lastRailRight   = -999;  // tracks where the last rail ended
+    this.lastRailColor   = null;  // tracks last rail color
+    this.activeRailEnd   = -999;  // x position where current rail ends
+    this.gateSection       = false; // next 10 spawns are gates only
+    this.gateSectionLeft   = 0;
+    this.gateSection25Done = false;
+    this.gateSection50Done = false;
   }
 
   get interval() { return Math.max(120, 360 - this.difficulty * 24); }
@@ -201,16 +225,36 @@ class ObstacleManager {
     return rightmost;
   }
 
-  update(frameCount) {
+  update(frameCount, score = 0) {
+    if (score >= 60) {
+      this.gateSection     = false;
+      this.gateSectionLeft = 0;
+    } else if (score >= 50 && !this.gateSection50Done && !this.gateSection && this.gateSectionLeft === 0) {
+      this.gateSection       = true;
+      this.gateSectionLeft   = 10;
+      this.gateSection50Done = true;
+    } else if (score >= 25 && !this.gateSection25Done && !this.gateSection && this.gateSectionLeft === 0) {
+      this.gateSection       = true;
+      this.gateSectionLeft   = 10;
+      this.gateSection25Done = true;
+    }
+
     this.spawnTimer++;
 
     if (this.spawnTimer >= this.interval) {
       this.spawnTimer = 0;
 
-      const types = ['barrel', 'ceiling', 'gate', 'rail'];
-      let type     = types[Math.floor(Math.random() * types.length)];
+      const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
+      let type     = this.gateSection && this.gateSectionLeft > 0
+        ? 'gate'
+        : types[Math.floor(Math.random() * types.length)];
       let color    = OBSTACLE_COLORS[Math.floor(Math.random() * 4)];
       let options  = {};
+
+      if (type === 'gate' && this.gateSection && this.gateSectionLeft > 0) {
+        this.gateSectionLeft--;
+        if (this.gateSectionLeft === 0) this.gateSection = false;
+      }
 
       if (type === 'rail') {
         // Precompute a width and ensure this new rail will not overlap an existing one.
