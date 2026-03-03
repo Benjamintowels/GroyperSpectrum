@@ -1,6 +1,14 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 
+function resize() {
+  canvasScale = Math.min(window.innerWidth / 800, window.innerHeight / 400);
+  canvas.style.width  = 800 * canvasScale + 'px';
+  canvas.style.height = 400 * canvasScale + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
 const keysDown = new Set();
 const touchKeys = new Map(); // touchId -> keyCode (for mobile)
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -165,24 +173,9 @@ function loop(ts) {
     return;
   }
 
-  // Frame-rate: only speed up when below ~60fps so desktop stays unchanged
+  // Frame-rate: only speed up when below ~60fps so timing is consistent
   const targetFrameMs = 1000 / 60;
-  const frameScale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
-  // Scale speed by display size so apparent speed is consistent (all resolutions + mobile)
-  const rect = canvas.getBoundingClientRect();
-  let displayScale = 1;
-  if (rect.width > 0) {
-    displayScale = canvas.width / rect.width;
-    // On mobile the canvas often fits the viewport; use viewport width as fallback if rect is still ~800
-    if (isTouchDevice && window.innerWidth > 0 && window.innerWidth < canvas.width) {
-      const viewportScale = canvas.width / window.innerWidth;
-      displayScale = Math.max(displayScale, viewportScale);
-    }
-    // Enforce minimum on touch devices so mobile never feels sluggish (e.g. iPhone ~390px wide)
-    if (isTouchDevice) displayScale = Math.max(displayScale, 2);
-    displayScale = Math.min(displayScale, 6);
-  }
-  const scale = frameScale * displayScale;
+  const scale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
 
   if (!gameOver) {
     frameCount++;

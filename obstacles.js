@@ -210,7 +210,10 @@ class ObstacleManager {
   }
 
   get interval() { return Math.max(120, 360 - this.difficulty * 24); }
-  get speed()    { return Math.min(2.5, 0.8 + this.difficulty * 0.17); }
+  get speed()    {
+    const base = Math.min(2.5, 0.8 + this.difficulty * 0.17);
+    return base / (typeof canvasScale === 'number' && canvasScale > 0 ? canvasScale : 1);
+  }
 
   // Check if a given x range overlaps an existing rail
   _overlapsRail(x, w) {
