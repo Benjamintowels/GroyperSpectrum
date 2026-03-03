@@ -1,0 +1,3 @@
+# Environment and secrets — ignore any form of .env
+.env
+.env.*
