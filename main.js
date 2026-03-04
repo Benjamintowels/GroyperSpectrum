@@ -28,6 +28,18 @@ const MODES = {
     colors: ['green'],
     keyMap: [],
   },
+  race: {
+    id: 'race',
+    label: 'Race Mode',
+    description: 'Clear 75 obstacles as fast as you can. Any clear counts.',
+    colors: ['green', 'blue', 'black', 'white'],
+    keyMap: [
+      ['KeyA', 'green'],
+      ['KeyS', 'blue'],
+      ['KeyD', 'black'],
+      ['KeyF', 'white'],
+    ],
+  },
 };
 
 let currentMode = 'endless';
@@ -94,7 +106,7 @@ function getModeButtons() {
   const startY   = 110;
   const centerX  = VIEW_W / 2 - btnW / 2;
   const buttons  = [];
-  const entries  = [MODES.endless, MODES.adventure];
+  const entries  = [MODES.endless, MODES.adventure, MODES.race];
   for (let i = 0; i < entries.length; i++) {
     const m = entries[i];
     buttons.push({
@@ -124,6 +136,14 @@ function startRun(modeId) {
   frameCount  = 0;
   score       = 0;
   speedMeter  = 0;
+  raceCompletedTime = null;
+  if (currentMode === 'race') {
+    raceStartTime = Date.now();
+    raceObstaclesCleared = 0;
+  } else {
+    raceStartTime = null;
+    raceObstaclesCleared = 0;
+  }
   keysDown.clear();
   touchKeys.clear();
   player.reset();
@@ -204,7 +224,11 @@ let lastTime    = 0;
 let gameOver    = false;
 let score       = 0;
 let highScore   = Number(localStorage.getItem('gs_highscore') || 0);
+let raceHighScore = Number(localStorage.getItem('gs_race_highscore') || Infinity); // best = lowest time (seconds)
 let startScreen = true;
+let raceStartTime = null;       // Date.now() when race started
+let raceObstaclesCleared = 0;   // 0..75
+let raceCompletedTime = null;  // seconds when finished 75
 let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
 
 const METER_MAX = 5;
@@ -348,6 +372,17 @@ function loop(ts) {
       if (!obs.scored && obs.right < player.left) {
         obs.scored = true;
         score++;
+        if (currentMode === 'race') {
+          raceObstaclesCleared++;
+          if (raceObstaclesCleared >= 75) {
+            raceCompletedTime = (Date.now() - raceStartTime) / 1000;
+            gameOver = true;
+            if (raceCompletedTime < raceHighScore) {
+              raceHighScore = raceCompletedTime;
+              localStorage.setItem('gs_race_highscore', String(raceHighScore));
+            }
+          }
+        }
         const giveMeter = (obs.type !== 'gate' && obs.type !== 'barrel') || obs.clearedForMeter;
         if (speedMeter < METER_MAX && giveMeter) speedMeter++;
       }
@@ -359,12 +394,27 @@ function loop(ts) {
   obsMgr.draw(ctx);
   player.draw(ctx);
 
-  // Score HUD
+  // Score HUD (or Race HUD when in race mode)
   ctx.fillStyle = '#fff';
   ctx.font      = 'bold 16px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`SCORE: ${score}${score >= 50 ? ' ★' : ''}`, 16, 28);
-  ctx.fillText(`BEST:  ${highScore}`, 16, 50);
+  if (currentMode === 'race') {
+    const raceTime = raceCompletedTime != null
+      ? raceCompletedTime
+      : (raceStartTime != null ? (Date.now() - raceStartTime) / 1000 : 0);
+    const mins = Math.floor(raceTime / 60);
+    const secs = (raceTime % 60).toFixed(2);
+    ctx.fillText(`TIME: ${mins}:${secs.padStart(5, '0')}`, 16, 28);
+    ctx.fillText(`OBSTACLES: ${raceObstaclesCleared}/75`, 16, 50);
+    if (raceHighScore !== Infinity) {
+      const bestM = Math.floor(raceHighScore / 60);
+      const bestS = (raceHighScore % 60).toFixed(2);
+      ctx.fillText(`RACE BEST: ${bestM}:${bestS.padStart(5, '0')}`, 16, 72);
+    }
+  } else {
+    ctx.fillText(`SCORE: ${score}${score >= 50 ? ' ★' : ''}`, 16, 28);
+    ctx.fillText(`BEST:  ${highScore}`, 16, 50);
+  }
 
   // Speed meter (0–5) and speed gauge — only during active play
   if (!startScreen && !gameOver) {
@@ -430,10 +480,30 @@ function loop(ts) {
   if (gameOver) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    ctx.fillStyle = '#f44';
-    ctx.font = 'bold 2rem monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2);
+    if (currentMode === 'race' && raceCompletedTime != null) {
+      ctx.fillStyle = '#4f4';
+      ctx.font = 'bold 2.2rem monospace';
+      ctx.fillText('COMPLETE', VIEW_W / 2, VIEW_H / 2 - 24);
+      const m = Math.floor(raceCompletedTime / 60);
+      const s = (raceCompletedTime % 60).toFixed(2);
+      ctx.font = 'bold 1.4rem monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`Time: ${m}:${s.padStart(5, '0')}`, VIEW_W / 2, VIEW_H / 2 + 12);
+      if (raceHighScore !== Infinity) {
+        const bm = Math.floor(raceHighScore / 60);
+        const bs = (raceHighScore % 60).toFixed(2);
+        ctx.font = 'bold 1rem monospace';
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillText(`Race Highscore: ${bm}:${bs.padStart(5, '0')}`, VIEW_W / 2, VIEW_H / 2 + 44);
+      }
+      ctx.font = 'bold 1rem monospace';
+      ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2 + 76);
+    } else {
+      ctx.fillStyle = '#f44';
+      ctx.font = 'bold 2rem monospace';
+      ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2);
+    }
     ctx.textAlign = 'left';
   }
 
