@@ -123,6 +123,7 @@ function startRun(modeId) {
   startScreen = false;
   frameCount  = 0;
   score       = 0;
+  speedMeter  = 0;
   keysDown.clear();
   touchKeys.clear();
   player.reset();
@@ -145,6 +146,7 @@ function onTouchStart(e) {
     startScreen = true;
     frameCount  = 0;
     score       = 0;
+    speedMeter  = 0;
     keysDown.clear();
     touchKeys.clear();
     player.reset();
@@ -152,6 +154,14 @@ function onTouchStart(e) {
     return;
   }
   const rect = canvas.getBoundingClientRect();
+  if (e.changedTouches.length > 0 && speedMeter >= METER_MAX) {
+    const t = e.changedTouches[0];
+    const pos = getTouchPos(t, rect);
+    if (hitTestMeter(pos.x, pos.y)) {
+      trySpeedBoost();
+      return;
+    }
+  }
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     const pos = getTouchPos(t, rect);
@@ -174,24 +184,43 @@ canvas.addEventListener('touchcancel', onTouchCancel, { passive: false });
 canvas.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
-  if (!startScreen) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (canvas.width / rect.width);
   const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-  const m = hitTestModeButton(x, y);
-  if (m) startRun(m);
+  if (startScreen) {
+    const m = hitTestModeButton(x, y);
+    if (m) startRun(m);
+    return;
+  }
+  if (!gameOver && speedMeter >= METER_MAX && hitTestMeter(x, y)) trySpeedBoost();
 });
 
 const bg     = new Background();
 const player = new Player();
 const obsMgr = new ObstacleManager();
 
-let frameCount = 0;
-let lastTime   = 0;
-let gameOver   = false;
-let score      = 0;
-let highScore  = Number(localStorage.getItem('gs_highscore') || 0);
+let frameCount  = 0;
+let lastTime    = 0;
+let gameOver    = false;
+let score       = 0;
+let highScore   = Number(localStorage.getItem('gs_highscore') || 0);
 let startScreen = true;
+let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
+
+const METER_MAX = 5;
+const METER_RECT = { x: VIEW_W - 140, y: 14, w: 120, h: 28 };
+
+function trySpeedBoost() {
+  if (gameOver || startScreen || speedMeter < METER_MAX) return false;
+  speedMeter = 0;
+  obsMgr.increaseSpeed();
+  return true;
+}
+
+function hitTestMeter(x, y) {
+  const r = METER_RECT;
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
 
 function checkCollisions() {
   for (const obs of obsMgr.obstacles) {
@@ -279,17 +308,18 @@ function loop(ts) {
     ctx.fillText('ASDF — swap colors (varies by mode)', 120, 228);
     ctx.fillText('↑ — jump (hold for height)', 120, 244);
     ctx.fillText('↓ — duck on ground / cancel jump in air', 120, 260);
+    ctx.fillText('→ — boost speed when meter is full (5 obstacles)', 120, 276);
 
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.font = 'bold 11px monospace';
-    ctx.fillText('OBSTACLES', 120, 288);
+    ctx.fillText('OBSTACLES', 120, 298);
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '10px monospace';
-    ctx.fillText('Barrel — jump + match color', 120, 306);
-    ctx.fillText('Ceiling — duck + match color', 120, 322);
-    ctx.fillText('Gate — match color, do not jump', 120, 338);
-    ctx.fillText('Rail — jump onto + match color to grind', 120, 354);
-    ctx.fillText('Gap — jump over (touch = death)', 120, 370);
+    ctx.fillText('Barrel — jump + match color', 120, 316);
+    ctx.fillText('Ceiling — duck + match color', 120, 332);
+    ctx.fillText('Gate — match color, do not jump', 120, 348);
+    ctx.fillText('Rail — jump onto + match color to grind', 120, 364);
+    ctx.fillText('Gap — jump over (touch = death)', 120, 380);
 
     ctx.textAlign = 'left';
     requestAnimationFrame(loop);
@@ -305,11 +335,12 @@ function loop(ts) {
     bg.update(obsMgr.speed * frameScale);
     checkCollisions();
 
-    // Award points for any obstacle that has fully passed the player
+    // Award points for any obstacle that has fully passed the player; fill speed meter (cap at 5)
     for (const obs of obsMgr.obstacles) {
       if (!obs.scored && obs.right < player.left) {
         obs.scored = true;
         score++;
+        if (speedMeter < METER_MAX) speedMeter++;
       }
     }
   }
@@ -325,6 +356,30 @@ function loop(ts) {
   ctx.textAlign = 'left';
   ctx.fillText(`SCORE: ${score}${score >= 50 ? ' ★' : ''}`, 16, 28);
   ctx.fillText(`BEST:  ${highScore}`, 16, 50);
+
+  // Speed meter (0–5) and speed gauge — only during active play
+  if (!startScreen && !gameOver) {
+    const r = METER_RECT;
+    const full = speedMeter >= METER_MAX;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = full ? '#fc0' : 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    const fillW = (speedMeter / METER_MAX) * (r.w - 4);
+    if (fillW > 0) {
+      ctx.fillStyle = full ? '#fa0' : '#3a8';
+      ctx.fillRect(r.x + 2, r.y + 2, fillW, r.h - 4);
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('BOOST', r.x + r.w / 2, r.y + 10);
+    ctx.fillText(full ? '→ TO GO' : `${speedMeter}/${METER_MAX}`, r.x + r.w / 2, r.y + 22);
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(`SPEED ${obsMgr.difficulty + 1}`, r.x, r.y + r.h + 16);
+  }
 
   // Touch control overlay (left diamond = colors, right = up/down) — only on touch devices
   if (!startScreen && isTouchDevice) {
@@ -382,6 +437,7 @@ window.addEventListener('keydown', e => {
     startRun(currentMode || 'endless');
     return;
   }
+  if (!gameOver && e.code === 'ArrowRight' && trySpeedBoost()) return;
   if (gameOver) {
     gameOver    = false;
     startScreen = true;

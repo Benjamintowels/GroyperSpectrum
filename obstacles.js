@@ -240,6 +240,11 @@ class ObstacleManager {
   // Base scroll speed, scaled up for a much faster game feel
   get speed()    { return SCROLL_SPEED_MULT * Math.min(2.5, 0.8 + this.difficulty * 0.17); }
 
+  // Called when player cashes in a full meter (e.g. ArrowRight). Increases speed level; meter is cleared in main.
+  increaseSpeed() {
+    this.difficulty = Math.min(10, this.difficulty + 1);
+  }
+
   // Check if a given x range overlaps an existing rail
   _overlapsRail(x, w) {
     for (const o of this.obstacles) {
@@ -355,7 +360,7 @@ class ObstacleManager {
 
       this.obstacles.push(new Obstacle(type, color, options));
       this.obstacleCount++;
-      this.difficulty = Math.min(10, Math.floor(this.obstacleCount / 5));
+      // Difficulty (speed) no longer auto-increases; player uses meter + ArrowRight.
     }
 
     for (const o of this.obstacles) o.update(this.speed * frameScale);
