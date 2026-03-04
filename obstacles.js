@@ -212,7 +212,9 @@ class ObstacleManager {
   get interval() { return Math.max(120, 360 - this.difficulty * 24); }
   get speed()    {
     const base = Math.min(2.5, 0.8 + this.difficulty * 0.17);
-    return base / (typeof canvasScale === 'number' && canvasScale > 0 ? canvasScale : 1);
+    // Only compensate when canvas is scaled down (e.g. mobile); desktop (scale >= 1) keeps original feel
+    const scale = typeof canvasScale === 'number' && canvasScale > 0 && canvasScale < 1 ? canvasScale : 1;
+    return base / scale;
   }
 
   // Check if a given x range overlaps an existing rail
