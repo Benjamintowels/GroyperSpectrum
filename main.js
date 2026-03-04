@@ -50,6 +50,15 @@ function onTouchStart(e) {
     touchKeys.clear();
     return;
   }
+  if (gameOver) {
+    gameOver = false;
+    frameCount = 0;
+    score = 0;
+    touchKeys.clear();
+    player.reset();
+    obsMgr.reset();
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
@@ -238,7 +247,7 @@ function loop(ts) {
     ctx.fillStyle = '#f44';
     ctx.font = 'bold 2rem monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS R TO RESTART', 400, 200);
+    ctx.fillText('PRESS ANY BUTTON TO RESTART', 400, 200);
     ctx.textAlign = 'left';
   }
 
@@ -252,7 +261,7 @@ window.addEventListener('keydown', e => {
     touchKeys.clear();
     return;
   }
-  if (e.code === 'KeyR' && gameOver) {
+  if (gameOver) {
     gameOver = false;
     frameCount = 0;
     score = 0;
