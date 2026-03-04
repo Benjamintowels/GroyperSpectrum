@@ -214,6 +214,7 @@ function trySpeedBoost() {
   if (gameOver || startScreen || speedMeter < METER_MAX) return false;
   speedMeter = 0;
   obsMgr.increaseSpeed();
+  player.playBoostLurch();
   return true;
 }
 

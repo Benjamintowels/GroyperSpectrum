@@ -26,6 +26,7 @@ class Player {
     this.cancelling  = false;
     this.peaking     = false;
     this.activeRail  = null;
+    this.lurchX      = 0;  // draw-only offset for speed-boost lurch (hitbox stays at P_X)
   }
 
   get h()      { return this.isDucking ? P_DUCK_H : P_H; }
@@ -99,6 +100,16 @@ class Player {
     // Placeholder — just reset for now, particles come later
     console.log('EXPLODE');
     this.state = 'dead';
+  }
+
+  // Visual only: lurch forward then tween back when player uses speed boost.
+  playBoostLurch() {
+    const lurchDist = 28;
+    const outDur    = 55;
+    const backDur   = 390;
+    this._tween(0, lurchDist, outDur, t => 1 - (1 - t) ** 2, v => { this.lurchX = v; }, () => {
+      this._tween(lurchDist, 0, backDur, t => t * t, v => { this.lurchX = v; }, null);
+    });
   }
 
   _startJump() {
@@ -176,23 +187,24 @@ class Player {
   draw(ctx) {
     const h   = this.h;
     const top = this.y - h;
+    const x   = P_X + this.lurchX;
 
     ctx.fillStyle = COLORS[this.color];
-    ctx.fillRect(P_X, top, P_W, h);
+    ctx.fillRect(x, top, P_W, h);
 
     ctx.fillStyle = '#000';
-    if (!this.isDucking) ctx.fillRect(P_X + P_W - 13, top + 9, 6, 6);
-    else ctx.fillRect(P_X + P_W - 13, top + 5, 6, 4);
+    if (!this.isDucking) ctx.fillRect(x + P_W - 13, top + 9, 6, 6);
+    else ctx.fillRect(x + P_W - 13, top + 5, 6, 4);
 
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth   = 1.5;
-    ctx.strokeRect(P_X, top, P_W, h);
+    ctx.strokeRect(x, top, P_W, h);
 
     // Debug state label
     ctx.fillStyle   = '#fff';
     ctx.font        = 'bold 9px monospace';
     ctx.textAlign   = 'center';
-    ctx.fillText(this.state.toUpperCase(), P_X + P_W / 2, top - 6);
+    ctx.fillText(this.state.toUpperCase(), x + P_W / 2, top - 6);
     ctx.textAlign   = 'left';
   }
 }
