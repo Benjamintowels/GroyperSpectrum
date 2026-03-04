@@ -7,8 +7,9 @@ const COLORS_MAP = {
   white: '#ddd',
 };
 
-const RAIL_HEIGHT = 8;
-const RAIL_Y      = GROUND_Y - P_H;
+const RAIL_HEIGHT       = 8;
+const RAIL_Y            = GROUND_Y - P_H;
+const SCROLL_SPEED_MULT = 8; // base scroll speed multiplier (was 10)
 
 class Obstacle {
   constructor(type, color, options = {}) {
@@ -209,8 +210,21 @@ class ObstacleManager {
     this.gateSection50Done = false;
   }
 
-  get interval() { return Math.max(120, 360 - this.difficulty * 24); }
-  get speed()    { return Math.min(2.5, 0.8 + this.difficulty * 0.17); }
+  // Spawn interval in "ideal 60fps frames".
+  // At max difficulty (10) we keep 120 frames (current tight spacing).
+  // At start (0) we use 480 frames, and every +1 difficulty (~5 cleared obstacles)
+  // closes the gap slightly.
+  get interval() {
+    const maxFrames = 480;   // easy start spacing
+    const minFrames = 120;   // hardest spacing (what you see now at high diff)
+    const steps     = 10;    // difficulty 0..10
+    const step      = (maxFrames - minFrames) / steps; // 36
+    const frames    = Math.max(minFrames, maxFrames - step * this.difficulty);
+    // Divide by speed multiplier so world-space spacing is based on frames.
+    return frames / SCROLL_SPEED_MULT;
+  }
+  // Base scroll speed, scaled up for a much faster game feel
+  get speed()    { return SCROLL_SPEED_MULT * Math.min(2.5, 0.8 + this.difficulty * 0.17); }
 
   // Check if a given x range overlaps an existing rail
   _overlapsRail(x, w) {
