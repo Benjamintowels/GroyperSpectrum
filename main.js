@@ -1,14 +1,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 
-function resize() {
-  canvasScale = Math.min(window.innerWidth / 800, window.innerHeight / 400);
-  canvas.style.width  = 800 * canvasScale + 'px';
-  canvas.style.height = 400 * canvasScale + 'px';
-}
-window.addEventListener('resize', resize);
-resize();
-
 const keysDown = new Set();
 const touchKeys = new Map(); // touchId -> keyCode (for mobile)
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -173,16 +165,13 @@ function loop(ts) {
     return;
   }
 
-  // Frame-rate: only speed up when below ~60fps so timing is consistent
-  const targetFrameMs = 1000 / 60;
-  const scale = dt > targetFrameMs * 1.1 ? Math.min(dt / targetFrameMs, 3) : 1;
-
   if (!gameOver) {
     frameCount++;
     player.handleInput();
     player.update(dt);
-    obsMgr.update(frameCount, score, scale);
-    bg.update(obsMgr.speed * scale);
+    obsMgr.update(dt, frameCount, score);
+    const frameScale = dt / 16.67;
+    bg.update(obsMgr.speed * frameScale);
     checkCollisions();
 
     // Award points for any obstacle that has fully passed the player

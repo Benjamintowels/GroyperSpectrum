@@ -210,12 +210,7 @@ class ObstacleManager {
   }
 
   get interval() { return Math.max(120, 360 - this.difficulty * 24); }
-  get speed()    {
-    const base = Math.min(2.5, 0.8 + this.difficulty * 0.17);
-    // Only compensate when canvas is scaled down (e.g. mobile); desktop (scale >= 1) keeps original feel
-    const scale = typeof canvasScale === 'number' && canvasScale > 0 && canvasScale < 1 ? canvasScale : 1;
-    return base / scale;
-  }
+  get speed()    { return Math.min(2.5, 0.8 + this.difficulty * 0.17); }
 
   // Check if a given x range overlaps an existing rail
   _overlapsRail(x, w) {
@@ -235,7 +230,10 @@ class ObstacleManager {
     return rightmost;
   }
 
-  update(frameCount, score = 0, scale = 1) {
+  update(dt, frameCount, score = 0) {
+    // Normalize time so logic based on the old \"per-frame\" values
+    // stays consistent across refresh rates.
+    const frameScale = dt / 16.67;
     if (score >= 60) {
       this.gateSection     = false;
       this.gateSectionLeft = 0;
@@ -249,7 +247,7 @@ class ObstacleManager {
       this.gateSection25Done = true;
     }
 
-    this.spawnTimer += scale;
+    this.spawnTimer += frameScale;
 
     if (this.spawnTimer >= this.interval) {
       this.spawnTimer = 0;
@@ -312,7 +310,7 @@ class ObstacleManager {
       this.difficulty = Math.min(10, Math.floor(this.obstacleCount / 5));
     }
 
-    for (const o of this.obstacles) o.update(this.speed * scale);
+    for (const o of this.obstacles) o.update(this.speed * frameScale);
     this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
   }
 
