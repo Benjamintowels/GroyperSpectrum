@@ -245,6 +245,11 @@ class ObstacleManager {
     this.difficulty = Math.min(10, this.difficulty + 1);
   }
 
+  // Called when player presses Left Arrow; slows scroll by one notch.
+  decreaseSpeed() {
+    this.difficulty = Math.max(0, this.difficulty - 1);
+  }
+
   // Check if a given x range overlaps an existing rail
   _overlapsRail(x, w) {
     for (const o of this.obstacles) {

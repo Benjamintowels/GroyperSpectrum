@@ -309,17 +309,18 @@ function loop(ts) {
     ctx.fillText('↑ — jump (hold for height)', 120, 244);
     ctx.fillText('↓ — duck on ground / cancel jump in air', 120, 260);
     ctx.fillText('→ — boost speed when meter is full (5 obstacles)', 120, 276);
+    ctx.fillText('← — slow down one notch', 120, 292);
 
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.font = 'bold 11px monospace';
-    ctx.fillText('OBSTACLES', 120, 298);
+    ctx.fillText('OBSTACLES', 120, 308);
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '10px monospace';
-    ctx.fillText('Barrel — jump + match color', 120, 316);
-    ctx.fillText('Ceiling — duck + match color', 120, 332);
-    ctx.fillText('Gate — match color, do not jump', 120, 348);
-    ctx.fillText('Rail — jump onto + match color to grind', 120, 364);
-    ctx.fillText('Gap — jump over (touch = death)', 120, 380);
+    ctx.fillText('Barrel — jump + match color', 120, 326);
+    ctx.fillText('Ceiling — duck + match color', 120, 342);
+    ctx.fillText('Gate — match color, do not jump', 120, 358);
+    ctx.fillText('Rail — jump onto + match color to grind', 120, 374);
+    ctx.fillText('Gap — jump over (touch = death)', 120, 390);
 
     ctx.textAlign = 'left';
     requestAnimationFrame(loop);
@@ -438,6 +439,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (!gameOver && e.code === 'ArrowRight' && trySpeedBoost()) return;
+  if (!gameOver && e.code === 'ArrowLeft') obsMgr.decreaseSpeed();
   if (gameOver) {
     gameOver    = false;
     startScreen = true;
