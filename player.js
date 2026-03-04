@@ -35,7 +35,9 @@ class Player {
   get bottom() { return this.y; }
 
   handleInput() {
-    const map = [['KeyA','green'],['KeyS','blue'],['KeyD','black'],['KeyF','white']];
+    const map = (typeof getActiveColorKeyMap === 'function')
+      ? getActiveColorKeyMap()
+      : [['KeyA','green'],['KeyS','blue'],['KeyD','black'],['KeyF','white']];
     for (const [code, col] of map) {
       if (isKeyDown(code) && this.color !== col) {
         // Swapping color on a rail = explode

@@ -1,4 +1,5 @@
 const OBSTACLE_COLORS = ['green', 'blue', 'black', 'white'];
+const SPAWN_X         = 1050; // just off the right edge of 1000px view
 
 const COLORS_MAP = {
   green: '#3d3',
@@ -9,13 +10,13 @@ const COLORS_MAP = {
 
 const RAIL_HEIGHT       = 8;
 const RAIL_Y            = GROUND_Y - P_H;
-const SCROLL_SPEED_MULT = 8; // base scroll speed multiplier (was 10)
+const SCROLL_SPEED_MULT = 7; // base scroll speed multiplier
 
 class Obstacle {
   constructor(type, color, options = {}) {
     this.type  = type;
     this.color = color;
-    this.x     = 850;
+    this.x     = SPAWN_X;
     this.scored = false;
 
     if (type === 'barrel') {
@@ -199,6 +200,7 @@ class ObstacleManager {
   reset() {
     this.obstacles       = [];
     this.spawnTimer      = 0;
+    this.nextInterval    = 0;
     this.obstacleCount   = 0;
     this.difficulty      = 0;
     this.lastRailRight   = -999;  // tracks where the last rail ended
@@ -222,6 +224,18 @@ class ObstacleManager {
     const frames    = Math.max(minFrames, maxFrames - step * this.difficulty);
     // Divide by speed multiplier so world-space spacing is based on frames.
     return frames / SCROLL_SPEED_MULT;
+  }
+
+  // Adds a randomized spread around the base interval so that even at high
+  // speed you sometimes get generous gaps and sometimes tighter runs.
+  _computeNextInterval() {
+    const base   = this.interval;
+    const minMul = 0.7;  // never closer than 70% of base
+    const maxMul = 2.4;  // allow up to ~2.4x base gap
+    const r      = Math.random();
+    // Bias slightly toward shorter-than-base but still occasionally long gaps.
+    const mul    = minMul + (maxMul - minMul) * (r * r);
+    return base * mul;
   }
   // Base scroll speed, scaled up for a much faster game feel
   get speed()    { return SCROLL_SPEED_MULT * Math.min(2.5, 0.8 + this.difficulty * 0.17); }
@@ -251,26 +265,45 @@ class ObstacleManager {
     if (score >= 60) {
       this.gateSection     = false;
       this.gateSectionLeft = 0;
+      // When leaving guided sections, reset so random spacing resumes cleanly.
+      this.nextInterval    = 0;
     } else if (score >= 50 && !this.gateSection50Done && !this.gateSection && this.gateSectionLeft === 0) {
       this.gateSection       = true;
       this.gateSectionLeft   = 10;
       this.gateSection50Done = true;
+      // Start this gate run with clean, even spacing.
+      this.spawnTimer        = 0;
+      this.nextInterval      = 0;
     } else if (score >= 25 && !this.gateSection25Done && !this.gateSection && this.gateSectionLeft === 0) {
       this.gateSection       = true;
       this.gateSectionLeft   = 10;
       this.gateSection25Done = true;
+      this.spawnTimer        = 0;
+      this.nextInterval      = 0;
     }
 
-    this.spawnTimer += frameScale;
+    const inGateRun = this.gateSection && this.gateSectionLeft > 0;
 
-    if (this.spawnTimer >= this.interval) {
+    this.spawnTimer += frameScale;
+    if (!inGateRun && !this.nextInterval) this.nextInterval = this._computeNextInterval();
+
+    const threshold = inGateRun ? this.interval : this.nextInterval;
+
+    if (this.spawnTimer >= threshold) {
       this.spawnTimer = 0;
+      if (!inGateRun) {
+        this.nextInterval = this._computeNextInterval();
+      }
 
       const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
       let type     = this.gateSection && this.gateSectionLeft > 0
         ? 'gate'
         : types[Math.floor(Math.random() * types.length)];
-      let color    = OBSTACLE_COLORS[Math.floor(Math.random() * 4)];
+
+      const palette = (typeof getActiveColors === 'function')
+        ? getActiveColors()
+        : OBSTACLE_COLORS;
+      let color    = palette[Math.floor(Math.random() * palette.length)];
       let options  = {};
 
       if (type === 'gate' && this.gateSection && this.gateSectionLeft > 0) {
@@ -283,7 +316,7 @@ class ObstacleManager {
         const minW   = 128;
         const maxW   = 512;
         const railW  = Math.round(minW + Math.random() * (maxW - minW));
-        const spawnX = 850;
+        const spawnX = SPAWN_X;
         const overlapRail = this._overlapsRail(spawnX, railW);
 
         if (overlapRail) {
@@ -299,7 +332,7 @@ class ObstacleManager {
         // Check if this new ceiling's spawn range overlaps any existing rail.
         // Because all obstacles scroll at the same speed, their relative X positions
         // never change, so checking at spawn time is enough.
-        const spawnX   = 850;
+        const spawnX   = SPAWN_X;
         const ceilingW = 64; // matches Obstacle 'ceiling' width
         const rail     = this._overlapsRail(spawnX, ceilingW);
 
@@ -312,8 +345,9 @@ class ObstacleManager {
           // the last obstacle was a rail. If so, delay this spawn for a buffer.
           const lastRail = [...this.obstacles].reverse().find(o => o.type === 'rail');
           if (lastRail && lastRail.right > -100) {
-            // Rail just exited — skip and wait
-            this.spawnTimer = Math.floor(this.interval * 0.5);
+            // Rail just exited — skip and wait roughly half of whatever the
+            // current randomized interval is.
+            this.spawnTimer = Math.floor(((inGateRun ? this.interval : this.nextInterval) || this.interval) * 0.5);
             return;
           }
         }
