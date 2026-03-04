@@ -18,6 +18,7 @@ class Obstacle {
     this.color = color;
     this.x     = SPAWN_X;
     this.scored = false;
+    this.clearedForMeter = false;  // set true when player clears gate (through) or barrel (jump + color)
 
     if (type === 'barrel') {
       this.w = 32;
@@ -154,7 +155,7 @@ class Obstacle {
                 : 'RAIL';
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(this.x + this.w / 2 - 14, this.y - 20, 28, 14);
-    ctx.fillStyle = COLORS_MAP[this.color];
+    ctx.fillStyle = this.type === 'gap' ? '#888' : COLORS_MAP[this.color];
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(label, this.x + this.w / 2, this.y - 9);

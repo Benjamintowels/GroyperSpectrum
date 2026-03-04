@@ -247,8 +247,14 @@ function checkCollisions() {
     }
 
     // All other obstacles
-    if (!obs.overlaps(player)) continue;
+    const hOverlap = player.right > obs.left + 5 && player.left < obs.right - 5;
+    if (!obs.overlaps(player)) {
+      // Barrel: can jump cleanly over (no vertical overlap); still count as cleared if jump + correct color while barrel is in our lane
+      if (obs.type === 'barrel' && hOverlap && player.state === 'jump' && player.color === obs.color) obs.clearedForMeter = true;
+      continue;
+    }
     if (!obs.playerSurvives(player)) triggerGameOver();
+    else if (obs.type === 'gate' || obs.type === 'barrel') obs.clearedForMeter = true;
   }
 
   // Color swap on rail check is handled inside player.handleInput
@@ -337,12 +343,13 @@ function loop(ts) {
     bg.update(obsMgr.speed * frameScale);
     checkCollisions();
 
-    // Award points for any obstacle that has fully passed the player; fill speed meter (cap at 5)
+    // Award points for any obstacle that has fully passed the player; fill speed meter only when cleared correctly (gate: through, barrel: jump+color)
     for (const obs of obsMgr.obstacles) {
       if (!obs.scored && obs.right < player.left) {
         obs.scored = true;
         score++;
-        if (speedMeter < METER_MAX) speedMeter++;
+        const giveMeter = (obs.type !== 'gate' && obs.type !== 'barrel') || obs.clearedForMeter;
+        if (speedMeter < METER_MAX && giveMeter) speedMeter++;
       }
     }
   }

@@ -106,7 +106,7 @@ class Player {
   playBoostLurch() {
     const lurchDist = 28;
     const outDur    = 55;
-    const backDur   = 390;
+    const backDur   = 590;
     this._tween(0, lurchDist, outDur, t => 1 - (1 - t) ** 2, v => { this.lurchX = v; }, () => {
       this._tween(lurchDist, 0, backDur, t => t * t, v => { this.lurchX = v; }, null);
     });
