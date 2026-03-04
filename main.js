@@ -40,6 +40,18 @@ const MODES = {
       ['KeyF', 'white'],
     ],
   },
+  tutorial: {
+    id: 'tutorial',
+    label: 'Tutorial',
+    description: 'Learn the controls and obstacles.',
+    colors: ['green', 'blue', 'black', 'white'],
+    keyMap: [
+      ['KeyA', 'green'],
+      ['KeyS', 'blue'],
+      ['KeyD', 'black'],
+      ['KeyF', 'white'],
+    ],
+  },
 };
 
 let currentMode = 'endless';
@@ -106,7 +118,7 @@ function getModeButtons() {
   const startY   = 110;
   const centerX  = VIEW_W / 2 - btnW / 2;
   const buttons  = [];
-  const entries  = [MODES.endless, MODES.adventure, MODES.race];
+  const entries  = [MODES.endless, MODES.adventure, MODES.race, MODES.tutorial];
   for (let i = 0; i < entries.length; i++) {
     const m = entries[i];
     buttons.push({
@@ -144,13 +156,29 @@ function startRun(modeId) {
     raceStartTime = null;
     raceObstaclesCleared = 0;
   }
+  if (currentMode === 'tutorial') {
+    tutorialMode       = true;
+    tutorialStep       = 0;
+    tutorialPaused     = true;
+    tutorialPromptText = 'Jump with Up and Duck with down';
+    tutorialStepTimer  = 0;
+    tutorialTargetScore = 0;
+  } else {
+    tutorialMode = false;
+  }
   keysDown.clear();
   touchKeys.clear();
   player.reset();
   obsMgr.reset();
+  if (currentMode === 'tutorial') obsMgr.tutorialMode = true;
+  else obsMgr.tutorialMode = false;
 }
 function onTouchStart(e) {
   if (e.cancelable) e.preventDefault();
+  if (tutorialMode && tutorialPaused) {
+    dismissTutorialPrompt();
+    return;
+  }
   if (startScreen) {
     const rect = canvas.getBoundingClientRect();
     if (e.changedTouches.length > 0) {
@@ -204,6 +232,10 @@ canvas.addEventListener('touchcancel', onTouchCancel, { passive: false });
 canvas.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
+  if (tutorialMode && tutorialPaused) {
+    dismissTutorialPrompt();
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (canvas.width / rect.width);
   const y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -234,6 +266,15 @@ let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowR
 const METER_MAX = 5;
 const METER_RECT = { x: VIEW_W - 140, y: 14, w: 120, h: 28 };
 
+// Tutorial state
+let tutorialMode       = false;
+let tutorialStep       = 0;
+let tutorialPaused     = false;
+let tutorialPromptText = '';
+let tutorialStepTimer  = 0;   // seconds of gameplay (not when paused)
+let tutorialTargetScore = 0;  // when in step 17, score to reach (score + 20) to complete
+let tutorialLastFailedBarrelRight = -999; // step 13: avoid spawning multiple barrels per failed one
+
 function trySpeedBoost() {
   if (gameOver || startScreen || speedMeter < METER_MAX) return false;
   speedMeter = 0;
@@ -245,6 +286,163 @@ function trySpeedBoost() {
 function hitTestMeter(x, y) {
   const r = METER_RECT;
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+function dismissTutorialPrompt() {
+  if (!tutorialMode || !tutorialPaused) return;
+  tutorialPaused = false;
+  if (tutorialStep === 0) tutorialStep = 1;
+  else if (tutorialStep === 2) tutorialStep = 3;
+  else if (tutorialStep === 4) tutorialStep = 5;
+  else if (tutorialStep === 6) tutorialStep = 7;
+  else if (tutorialStep === 8) tutorialStep = 9;
+  else if (tutorialStep === 10) tutorialStep = 11;
+  else if (tutorialStep === 12) {
+    tutorialStep = 13;
+    tutorialLastFailedBarrelRight = -999;
+  }
+  else if (tutorialStep === 14) tutorialStep = 15;
+  else if (tutorialStep === 16) {
+    tutorialStep = 17;
+    tutorialTargetScore = score + 20;
+    obsMgr.tutorialMode = false;
+  } else if (tutorialStep === 18) {
+    tutorialMode = false;
+    tutorialPaused = false;
+    obsMgr.tutorialMode = false;
+    startScreen = true;
+    gameOver = false;
+    frameCount = 0;
+    score = 0;
+    speedMeter = 0;
+    keysDown.clear();
+    touchKeys.clear();
+    player.reset();
+    obsMgr.reset();
+  }
+}
+
+function updateTutorialSteps(dt) {
+  if (!tutorialMode || tutorialPaused) return;
+  const sec = dt / 1000;
+  const gates = obsMgr.obstacles.filter(o => o.type === 'gate');
+  const ceilings = obsMgr.obstacles.filter(o => o.type === 'ceiling');
+  const rails = obsMgr.obstacles.filter(o => o.type === 'rail');
+  const barrels = obsMgr.obstacles.filter(o => o.type === 'barrel');
+
+  if (tutorialStep === 1) {
+    tutorialStepTimer += sec;
+    if (tutorialStepTimer >= 5) {
+      tutorialStepTimer = 0;
+      obsMgr.spawnTutorialObstacle('gate', 'green');
+      tutorialStep = 2;
+    }
+  } else if (tutorialStep === 2) {
+    const gate = gates[0];
+    if (gate && gate.left < VIEW_W) {
+      tutorialPaused = true;
+      tutorialPromptText = 'Gates must be run thru';
+    }
+  } else if (tutorialStep === 3) {
+    const gate = gates[0];
+    if (!gate || gate.right < player.left) {
+      tutorialStepTimer += sec;
+      if (tutorialStepTimer >= 3) {
+        tutorialStepTimer = 0;
+        obsMgr.spawnTutorialObstacle('ceiling', 'green');
+        tutorialStep = 4;
+      }
+    }
+  } else if (tutorialStep === 4) {
+    const ceiling = ceilings[0];
+    if (ceiling && ceiling.left < VIEW_W) {
+      tutorialPaused = true;
+      tutorialPromptText = 'Ceilings must be ducked under';
+    }
+  } else if (tutorialStep === 5) {
+    const ceiling = ceilings[0];
+    if (!ceiling || ceiling.right < player.left) {
+      tutorialStepTimer += sec;
+      if (tutorialStepTimer >= 3) {
+        tutorialStepTimer = 0;
+        obsMgr.spawnTutorialObstacle('rail', 'green', { w: 256 });
+        tutorialStep = 6;
+      }
+    }
+  } else if (tutorialStep === 6) {
+    const rail = rails[0];
+    if (rail && rail.left < VIEW_W) {
+      tutorialPaused = true;
+      tutorialPromptText = 'Rails must be jumped on';
+    }
+  } else if (tutorialStep === 7) {
+    const rail = rails[0];
+    if (!rail || rail.right < player.left) {
+      tutorialStepTimer += sec;
+      if (tutorialStepTimer >= 3) {
+        tutorialStepTimer = 0;
+        tutorialPaused = true;
+        tutorialPromptText = 'Swap Colors with A,S,D,F';
+        tutorialStep = 8;
+      }
+    }
+  } else if (tutorialStep === 9) {
+    tutorialStepTimer += sec;
+    if (tutorialStepTimer >= 5) {
+      tutorialStepTimer = 0;
+      obsMgr.spawnTutorialObstacle('gate', 'blue');
+      tutorialStep = 10;
+    }
+  } else if (tutorialStep === 10) {
+    const gate = gates.find(g => g.color === 'blue');
+    if (gate && gate.left < VIEW_W) {
+      tutorialPaused = true;
+      tutorialPromptText = 'Match the color with the Gate to pass thru';
+    }
+  } else if (tutorialStep === 11) {
+    const gate = gates.find(g => g.color === 'blue');
+    if (!gate || gate.right < player.left) {
+      tutorialStepTimer += sec;
+      if (tutorialStepTimer >= 3) {
+        tutorialStepTimer = 0;
+        obsMgr.spawnTutorialObstacle('barrel', 'green');
+        tutorialStep = 12;
+      }
+    }
+  } else if (tutorialStep === 12) {
+    const barrel = barrels[0];
+    if (barrel && barrel.left < VIEW_W) {
+      tutorialPaused = true;
+      tutorialPromptText = 'Jump over barrels with the correct color to increase your Speed Meter';
+    }
+  } else if (tutorialStep === 13) {
+    const passedBarrels = barrels.filter(b => b.right < player.left).sort((a, b) => b.right - a.right);
+    const rightmost = passedBarrels[0];
+    if (rightmost) {
+      if (rightmost.clearedForMeter) {
+        tutorialPaused = true;
+        tutorialPromptText = 'When your speed meter is full press Right to increase speed';
+        tutorialStep = 14;
+      } else if (rightmost.right > tutorialLastFailedBarrelRight) {
+        tutorialLastFailedBarrelRight = rightmost.right;
+        obsMgr.spawnTutorialObstacle('barrel', 'green');
+      }
+    }
+  } else if (tutorialStep === 15) {
+    tutorialStepTimer += sec;
+    if (tutorialStepTimer >= 3) {
+      tutorialStepTimer = 0;
+      tutorialPaused = true;
+      tutorialPromptText = 'Finish the course as fast as possible';
+      tutorialStep = 16;
+    }
+  } else if (tutorialStep === 17) {
+    if (score >= tutorialTargetScore) {
+      tutorialPaused = true;
+      tutorialPromptText = 'COMPLETE';
+      tutorialStep = 18;
+    }
+  }
 }
 
 function checkCollisions() {
@@ -358,7 +556,7 @@ function loop(ts) {
     return;
   }
 
-  if (!gameOver) {
+  if (!gameOver && !(tutorialMode && tutorialPaused)) {
     frameCount++;
     player.handleInput();
     player.update(dt);
@@ -387,6 +585,7 @@ function loop(ts) {
         if (speedMeter < METER_MAX && giveMeter) speedMeter++;
       }
     }
+    if (tutorialMode && !tutorialPaused) updateTutorialSteps(dt);
   }
 
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -477,6 +676,24 @@ function loop(ts) {
     ctx.textAlign = 'left';
   }
 
+  if (tutorialMode && tutorialPaused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = tutorialStep === 18 ? 'bold 2.2rem monospace' : 'bold 1.4rem monospace';
+    const lines = tutorialPromptText.split('\n');
+    const lineHeight = 32;
+    const startY = VIEW_H / 2 - (lines.length * lineHeight) / 2 + lineHeight / 2;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, VIEW_W / 2, startY + i * lineHeight);
+    });
+    ctx.font = 'bold 1rem monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText('PRESS ANY KEY TO CONTINUE', VIEW_W / 2, startY + lines.length * lineHeight + 24);
+    ctx.textAlign = 'left';
+  }
+
   if (gameOver) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -511,6 +728,11 @@ function loop(ts) {
 }
 
 window.addEventListener('keydown', e => {
+  if (tutorialMode && tutorialPaused) {
+    dismissTutorialPrompt();
+    e.preventDefault();
+    return;
+  }
   if (startScreen) {
     // Keyboard: start the currently highlighted mode
     startRun(currentMode || 'endless');

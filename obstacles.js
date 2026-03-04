@@ -211,6 +211,12 @@ class ObstacleManager {
     this.gateSectionLeft   = 0;
     this.gateSection25Done = false;
     this.gateSection50Done = false;
+    this.tutorialMode    = false; // when true, no auto-spawn; use spawnTutorialObstacle from main
+  }
+
+  spawnTutorialObstacle(type, color, options = {}) {
+    this.obstacles.push(new Obstacle(type, color, options));
+    this.obstacleCount++;
   }
 
   // Spawn interval in "ideal 60fps frames".
@@ -273,6 +279,11 @@ class ObstacleManager {
     // Normalize time so logic based on the old \"per-frame\" values
     // stays consistent across refresh rates.
     const frameScale = dt / 16.67;
+    if (this.tutorialMode) {
+      for (const o of this.obstacles) o.update(this.speed * frameScale);
+      this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
+      return;
+    }
     if (score >= 60) {
       this.gateSection     = false;
       this.gateSectionLeft = 0;
