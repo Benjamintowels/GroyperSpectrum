@@ -24,7 +24,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    #gameWrap { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+    #gameWrap { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
     #gameCanvas { display: block; }
     #rotateOverlay {
       display: none;
@@ -53,7 +53,7 @@
   <div id="gameWrap">
     <p id="gameLoading" style="position:absolute;color:#888;font:1rem monospace;z-index:5;">Loading...</p>
     <canvas id="gameCanvas" width="1000" height="400"></canvas>
-    <button type="button" id="dailyRunBtn" style="display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 370px; padding: 12px 28px; font: bold 1rem monospace; color: #fff; background: #28f; border: 2px solid #5af; border-radius: 8px; cursor: pointer; z-index: 10;">DAILY RUN</button>
+    <button type="button" id="dailyRunBtn" style="display: none; position: absolute; left: 50%; transform: translate(-50%, -50%); padding: 12px 28px; font: bold 1rem monospace; color: #fff; background: #28f; border: 2px solid #5af; border-radius: 8px; cursor: pointer; z-index: 10;">DAILY RUN</button>
   </div>
   <script>
     (function() {
