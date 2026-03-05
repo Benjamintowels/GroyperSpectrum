@@ -12,6 +12,7 @@
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     #gameWrap { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+    body.desktop #gameWrap { width: 1000px; height: 400px; max-width: 100vw; max-height: 100vh; box-shadow: 0 0 0 1px rgba(255,255,255,0.06); }
     canvas { display: block; }
     #rotateOverlay {
       display: none;
@@ -70,19 +71,27 @@
       });
       updateRotateOverlay();
       var tg = window.Telegram && window.Telegram.WebApp;
+      var isDesktop = false;
+      if (tg && tg.platform) {
+        var p = tg.platform.toLowerCase();
+        isDesktop = (p !== 'android' && p !== 'ios');
+      }
+      if (isDesktop) {
+        document.body.classList.add('desktop');
+      }
       if (tg) {
         tg.ready();
-        tg.expand();
-        if (tg.requestFullscreen) {
-          tg.requestFullscreen();
+        if (!isDesktop) {
+          tg.expand();
+          if (tg.requestFullscreen) tg.requestFullscreen();
+          tg.onEvent('fullscreenChanged', function() {
+            if (tg.isFullscreen) tryLockLandscape();
+          });
+          tg.setHeaderColor && tg.setHeaderColor('#111111');
         }
-        tg.onEvent('fullscreenChanged', function() {
-          if (tg.isFullscreen) tryLockLandscape();
-        });
-        tg.setHeaderColor && tg.setHeaderColor('#111111');
       }
       if (!isPortrait()) tryLockLandscape();
-      setTimeout(tryLockLandscape, 500);
+      if (!isDesktop) setTimeout(tryLockLandscape, 500);
     })();
   </script>
   <script src="background.js"></script>
