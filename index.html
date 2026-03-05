@@ -12,7 +12,7 @@
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     #gameWrap { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-    canvas { display: block; }
+    #gameCanvas { display: block; }
     #rotateOverlay {
       display: none;
       position: fixed;
@@ -42,6 +42,15 @@
   </div>
   <script>
     (function() {
+      var GAME_W = 1000, GAME_H = 400;
+      function scaleCanvasToViewport() {
+        var c = document.getElementById('gameCanvas');
+        if (!c) return;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var scale = Math.min(vw / GAME_W, vh / GAME_H);
+        c.style.width = (GAME_W * scale) + 'px';
+        c.style.height = (GAME_H * scale) + 'px';
+      }
       function isPortrait() { return window.innerWidth < window.innerHeight; }
       function updateRotateOverlay() {
         var el = document.getElementById('rotateOverlay');
@@ -63,11 +72,16 @@
           tg.lockOrientation();
         }
       }
-      window.addEventListener('resize', updateRotateOverlay);
+      window.addEventListener('resize', function() {
+        scaleCanvasToViewport();
+        updateRotateOverlay();
+      });
       window.addEventListener('orientationchange', function() {
+        scaleCanvasToViewport();
         updateRotateOverlay();
         if (!isPortrait()) tryLockLandscape();
       });
+      scaleCanvasToViewport();
       updateRotateOverlay();
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) {
