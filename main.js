@@ -25,6 +25,8 @@ const VIEW_H  = canvas.height;
 const API_URL = 'http://45.55.249.232:3000';
 let isDailyRun = false;
 let dailyDate = null;
+let dailyRunErrorMsg = null;
+let dailyRunErrorAt = 0;
 
 // Game modes (easy to extend with new entries)
 const MODES = {
@@ -164,10 +166,18 @@ function hitTestModeButton(x, y) {
 
 let runStartTime = null;
 
+function showDailyRunError(msg) {
+  dailyRunErrorMsg = msg;
+  dailyRunErrorAt = Date.now();
+}
+
 async function startDailyRun() {
+  dailyRunErrorMsg = null;
   try {
     const res = await fetch(`${API_URL}/daily-seed`);
+    if (!res.ok) throw new Error('Server error ' + res.status);
     const data = await res.json();
+    if (!data.seed || !data.date) throw new Error('Invalid daily seed response');
     const pattern = obsMgr.generateDailyPattern(data.seed);
     startRun('race');
     obsMgr.setDailyPattern(pattern);
@@ -177,6 +187,7 @@ async function startDailyRun() {
     if (btn) btn.style.display = 'none';
   } catch (e) {
     console.error('Daily run failed:', e);
+    showDailyRunError(e.message || 'Daily run failed');
   }
 }
 
@@ -244,7 +255,15 @@ function onTouchStart(e) {
   if (startScreen) {
     const rect = canvas.getBoundingClientRect();
     if (e.changedTouches.length > 0) {
-      const t   = e.changedTouches[0];
+      const t = e.changedTouches[0];
+      const btn = document.getElementById('dailyRunBtn');
+      if (btn && btn.style.display !== 'none') {
+        const br = btn.getBoundingClientRect();
+        if (t.clientX >= br.left && t.clientX <= br.right && t.clientY >= br.top && t.clientY <= br.bottom) {
+          startDailyRun();
+          return;
+        }
+      }
       const pos = getTouchPos(t, rect);
       const m   = hitTestModeButton(pos.x, pos.y);
       if (m) startRun(m);
@@ -304,6 +323,14 @@ canvas.addEventListener('mousedown', e => {
   const x = (e.clientX - rect.left) * (canvas.width / rect.width);
   const y = (e.clientY - rect.top) * (canvas.height / rect.height);
   if (startScreen) {
+    const btn = document.getElementById('dailyRunBtn');
+    if (btn && btn.style.display !== 'none') {
+      const br = btn.getBoundingClientRect();
+      if (e.clientX >= br.left && e.clientX <= br.right && e.clientY >= br.top && e.clientY <= br.bottom) {
+        startDailyRun();
+        return;
+      }
+    }
     const m = hitTestModeButton(x, y);
     if (m) startRun(m);
     return;
@@ -636,6 +663,14 @@ function loop(ts) {
     ctx.fillText('Rail — jump onto + match color to grind', 120, 346);
     ctx.fillText('Gap — jump over (touch = death)', 120, 360);
 
+    if (dailyRunErrorMsg && Date.now() - dailyRunErrorAt < 5000) {
+      ctx.fillStyle = 'rgba(200, 80, 80, 0.95)';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(dailyRunErrorMsg, VIEW_W / 2, 385);
+      ctx.textAlign = 'left';
+    }
+
     ctx.textAlign = 'left';
     requestAnimationFrame(loop);
     return;
@@ -857,7 +892,14 @@ window.addEventListener('keydown', e => {
 (function setupDailyRunButton() {
   const btn = document.getElementById('dailyRunBtn');
   if (btn) {
-    btn.addEventListener('click', function() { startDailyRun(); });
+    function runDaily() {
+      startDailyRun();
+    }
+    btn.addEventListener('click', runDaily);
+    btn.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      runDaily();
+    }, { passive: false });
   }
 })();
 
