@@ -22,7 +22,7 @@ canvas.height = 400;
 const VIEW_W  = canvas.width;
 const VIEW_H  = canvas.height;
 
-const API_URL = 'http://45.55.249.232:3000';
+const API_URL = 'https://outstanding-gain-earth-wants.trycloudflare.com';
 let isDailyRun = false;
 let dailyDate = null;
 let dailyRunErrorMsg = null;
