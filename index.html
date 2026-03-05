@@ -43,10 +43,19 @@
   </div>
   <script>
     (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var isDesktop = false;
+      if (tg && tg.platform) {
+        var p = tg.platform.toLowerCase();
+        isDesktop = (p !== 'android' && p !== 'ios');
+      }
+      if (isDesktop) document.body.classList.add('desktop');
+
       function isPortrait() { return window.innerWidth < window.innerHeight; }
       function updateRotateOverlay() {
         var el = document.getElementById('rotateOverlay');
-        if (isPortrait()) {
+        var show = !isDesktop && isPortrait();
+        if (show) {
           el.classList.add('portrait');
           el.setAttribute('aria-hidden', 'false');
         } else {
@@ -59,7 +68,6 @@
         if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.lock) {
           screen.orientation.lock('landscape').catch(function() {});
         }
-        var tg = window.Telegram && window.Telegram.WebApp;
         if (tg && tg.lockOrientation && !tg.isOrientationLocked) {
           tg.lockOrientation();
         }
@@ -70,15 +78,6 @@
         if (!isPortrait()) tryLockLandscape();
       });
       updateRotateOverlay();
-      var tg = window.Telegram && window.Telegram.WebApp;
-      var isDesktop = false;
-      if (tg && tg.platform) {
-        var p = tg.platform.toLowerCase();
-        isDesktop = (p !== 'android' && p !== 'ios');
-      }
-      if (isDesktop) {
-        document.body.classList.add('desktop');
-      }
       if (tg) {
         tg.ready();
         if (!isDesktop) {
