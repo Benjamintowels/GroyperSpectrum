@@ -28,19 +28,42 @@ let dailyDate = null;
 let dailyRunErrorMsg = null;
 let dailyRunErrorAt = 0;
 
-function getTodayDateString() {
+// Global daily: one reset for all users (midnight UTC)
+function getServerDateString() {
   const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1, day = d.getUTCDate();
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+
+function getNextResetAt() {
+  const d = new Date();
+  const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0));
+  return next.getTime();
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return '0m';
+  const s = Math.floor(ms / 1000) % 60;
+  const m = Math.floor(ms / 60000) % 60;
+  const h = Math.floor(ms / 3600000) % 24;
+  const d = Math.floor(ms / 86400000);
+  const parts = [];
+  if (d > 0) parts.push(d + 'd');
+  if (h > 0) parts.push(h + 'h');
+  parts.push(m + 'm');
+  if (d === 0 && h === 0) parts.push(s + 's');
+  return parts.join(' ');
 }
 
 function getDailyRunMarkerState() {
-  const key = 'gs_daily_' + getTodayDateString();
+  const key = 'gs_daily_' + getServerDateString();
   const completed = localStorage.getItem(key);
   return completed !== null ? parseFloat(completed, 10) : null;
 }
 
-function setDailyRunCompleted(timeSeconds) {
-  localStorage.setItem('gs_daily_' + getTodayDateString(), String(timeSeconds));
+function setDailyRunCompleted(timeSeconds, date) {
+  const key = 'gs_daily_' + (date != null ? date : getServerDateString());
+  localStorage.setItem(key, String(timeSeconds));
 }
 
 function formatRaceTime(seconds) {
@@ -656,6 +679,22 @@ function loop(ts) {
       dailyMarker.style.display = 'none';
     }
   }
+  const dailyCountdown = document.getElementById('dailyRunCountdown');
+  if (dailyCountdown) {
+    if (startScreen && dailyBtn && dailyBtn.style.display !== 'none') {
+      const remaining = getNextResetAt() - Date.now();
+      dailyCountdown.textContent = 'Next daily in ' + formatCountdown(remaining);
+      dailyCountdown.style.display = 'block';
+      const wrap = canvas && canvas.parentElement && canvas.parentElement.getBoundingClientRect();
+      const btnRect = dailyBtn.getBoundingClientRect();
+      if (wrap) {
+        dailyCountdown.style.top = (btnRect.bottom - wrap.top + 6) + 'px';
+        dailyCountdown.style.left = (wrap.left - wrap.left + wrap.width / 2) + 'px';
+      }
+    } else {
+      dailyCountdown.style.display = 'none';
+    }
+  }
 
   if (startScreen) {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -745,7 +784,7 @@ function loop(ts) {
             gameOver = true;
             if (isDailyRun) {
               submitDailyScore(score);
-              setDailyRunCompleted(raceCompletedTime);
+              setDailyRunCompleted(raceCompletedTime, dailyDate);
             }
             if (raceCompletedTime < raceHighScore) {
               raceHighScore = raceCompletedTime;
