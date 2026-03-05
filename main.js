@@ -141,6 +141,8 @@ function hitTestModeButton(x, y) {
   return null;
 }
 
+let runStartTime = null;
+
 function startRun(modeId) {
   currentMode = modeId || currentMode || 'endless';
   gameOver    = false;
@@ -149,6 +151,8 @@ function startRun(modeId) {
   score       = 0;
   speedMeter  = 0;
   raceCompletedTime = null;
+  endlessFinishedTime = null;
+  runStartTime = Date.now();
   if (currentMode === 'race') {
     raceStartTime = Date.now();
     raceObstaclesCleared = 0;
@@ -261,6 +265,7 @@ let startScreen = true;
 let raceStartTime = null;       // Date.now() when race started
 let raceObstaclesCleared = 0;   // 0..75
 let raceCompletedTime = null;  // seconds when finished 75
+let endlessFinishedTime = null;  // seconds when endless run ended (frozen for FINISHED screen)
 let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
 
 const METER_MAX = 5;
@@ -486,6 +491,9 @@ function checkCollisions() {
 function triggerGameOver() {
   if (gameOver) return;
   gameOver = true;
+  if (currentMode === 'endless' && runStartTime != null) {
+    endlessFinishedTime = (Date.now() - runStartTime) / 1000;
+  }
   if (score > highScore) {
     highScore = score;
     localStorage.setItem('gs_highscore', String(highScore));
@@ -716,6 +724,20 @@ function loop(ts) {
       }
       ctx.font = 'bold 1rem monospace';
       ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2 + 76);
+    } else if (currentMode === 'endless') {
+      const elapsed = endlessFinishedTime != null ? endlessFinishedTime : 0;
+      const m = Math.floor(elapsed / 60);
+      const s = (elapsed % 60).toFixed(2);
+      ctx.fillStyle = '#4f4';
+      ctx.font = 'bold 2.2rem monospace';
+      ctx.fillText('FINISHED', VIEW_W / 2, VIEW_H / 2 - 44);
+      ctx.font = 'bold 1.2rem monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`Obstacles passed: ${score}`, VIEW_W / 2, VIEW_H / 2);
+      ctx.fillText(`Time: ${m}:${s.padStart(5, '0')}`, VIEW_W / 2, VIEW_H / 2 + 28);
+      ctx.font = 'bold 1rem monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2 + 72);
     } else {
       ctx.fillStyle = '#f44';
       ctx.font = 'bold 2rem monospace';
