@@ -6,7 +6,20 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="screen-orientation" content="landscape"/>
   <title>Toad Runner</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (function() {
+      try {
+        if (typeof window.TelegramGameProxy === 'undefined') {
+          window.TelegramGameProxy = { receiveEvent: function() {} };
+        }
+      } catch (e) {}
+      var p = window.location.pathname || '/';
+      var i = p.lastIndexOf('/');
+      var base = document.createElement('base');
+      base.href = (i >= 0 ? p.substring(0, i + 1) : '/');
+      document.head.appendChild(base);
+    })();
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
@@ -38,10 +51,13 @@
     <p>Please rotate your device to landscape to play</p>
   </div>
   <div id="gameWrap">
+    <p id="gameLoading" style="position:absolute;color:#888;font:1rem monospace;z-index:5;">Loading...</p>
     <canvas id="gameCanvas" width="1000" height="400"></canvas>
+    <button type="button" id="dailyRunBtn" style="display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 370px; padding: 12px 28px; font: bold 1rem monospace; color: #fff; background: #28f; border: 2px solid #5af; border-radius: 8px; cursor: pointer; z-index: 10;">DAILY RUN</button>
   </div>
   <script>
     (function() {
+      var isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
       var GAME_W = 1000, GAME_H = 400;
       function scaleCanvasToViewport() {
         var c = document.getElementById('gameCanvas');
@@ -63,45 +79,94 @@
         }
       }
       function tryLockLandscape() {
-        if (isPortrait()) return;
-        if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(function() {});
-        }
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg && tg.lockOrientation && !tg.isOrientationLocked) {
-          tg.lockOrientation();
-        }
+        try {
+          if (isPortrait()) return;
+          if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(function() {});
+          }
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg && tg.lockOrientation && !tg.isOrientationLocked) {
+            try { tg.lockOrientation(); } catch (e) {}
+          }
+        } catch (e) {}
       }
-      window.addEventListener('resize', function() {
-        scaleCanvasToViewport();
-        updateRotateOverlay();
-      });
+      function onResize() {
+        try {
+          scaleCanvasToViewport();
+          var el = document.getElementById('rotateOverlay');
+          if (el) {
+            if (isPortrait()) {
+              el.classList.add('portrait');
+              el.setAttribute('aria-hidden', 'false');
+            } else {
+              el.classList.remove('portrait');
+              el.setAttribute('aria-hidden', 'true');
+            }
+          }
+        } catch (e) {}
+      }
+      window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', function() {
-        scaleCanvasToViewport();
-        updateRotateOverlay();
-        if (!isPortrait()) tryLockLandscape();
+        try {
+          onResize();
+          if (!isPortrait()) tryLockLandscape();
+        } catch (e) {}
       });
-      scaleCanvasToViewport();
-      updateRotateOverlay();
-      var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) {
-        tg.ready();
-        tg.expand();
-        if (tg.requestFullscreen) {
-          tg.requestFullscreen();
+      onResize();
+      if (!isLocalHost) {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg) {
+          try {
+            tg.ready();
+            tg.expand();
+            try { if (tg.requestFullscreen) tg.requestFullscreen(); } catch (e) {}
+            try { tg.onEvent('fullscreenChanged', function() { if (tg.isFullscreen) tryLockLandscape(); }); } catch (e) {}
+            try { if (tg.setHeaderColor) tg.setHeaderColor('#111111'); } catch (e) {}
+          } catch (e) {}
         }
-        tg.onEvent('fullscreenChanged', function() {
-          if (tg.isFullscreen) tryLockLandscape();
-        });
-        tg.setHeaderColor && tg.setHeaderColor('#111111');
+        try { if (!isPortrait()) tryLockLandscape(); } catch (e) {}
+        setTimeout(function() { try { tryLockLandscape(); } catch (e) {} }, 500);
       }
-      if (!isPortrait()) tryLockLandscape();
-      setTimeout(tryLockLandscape, 500);
     })();
   </script>
+  <script src="seededRandom.js"></script>
   <script src="background.js"></script>
   <script src="player.js"></script>
   <script src="obstacles.js"></script>
   <script src="main.js"></script>
+  <script>
+    (function() {
+      setTimeout(function() {
+        var el = document.getElementById('gameLoading');
+        if (el) {
+          el.style.color = '#f88';
+          el.style.whiteSpace = 'pre-wrap';
+          el.textContent = 'Game did not start.\n\n1. Open F12 → Console and check for red errors.\n2. Open F12 → Network and see if any .js file is red (404).\n3. Make sure you are using http:// (e.g. http://localhost:8000), not file://';
+        }
+      }, 3000);
+    })();
+  </script>
+  <script>
+    (function() {
+      var isLocal = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
+      if (isLocal) return;
+      var s = document.createElement('script');
+      s.src = 'https://telegram.org/js/telegram-web-app.js';
+      s.async = true;
+      s.onload = function() {
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg) {
+            tg.ready();
+            tg.expand();
+            try { if (tg.requestFullscreen) tg.requestFullscreen(); } catch (e) {}
+            try { tg.onEvent('fullscreenChanged', function() {}); } catch (e) {}
+            try { if (tg.setHeaderColor) tg.setHeaderColor('#111111'); } catch (e) {}
+          }
+        } catch (e) {}
+      };
+      document.body.appendChild(s);
+    })();
+  </script>
 </body>
 </html>

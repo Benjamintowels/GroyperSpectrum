@@ -212,6 +212,30 @@ class ObstacleManager {
     this.gateSection25Done = false;
     this.gateSection50Done = false;
     this.tutorialMode    = false; // when true, no auto-spawn; use spawnTutorialObstacle from main
+    this.dailyMode       = false;
+    this.dailyPattern    = null;
+    this.dailyPatternIndex = 0;
+  }
+
+  generateDailyPattern(seed) {
+    const rng = new SeededRandom(seed);
+    const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
+    const colors = OBSTACLE_COLORS;
+    const pattern = [];
+    for (let i = 0; i < 75; i++) {
+      const type = rng.pick(types);
+      const color = rng.pick(colors);
+      const entry = { type, color };
+      if (type === 'rail') entry.w = rng.nextInt(128, 512);
+      pattern.push(entry);
+    }
+    return pattern;
+  }
+
+  setDailyPattern(pattern) {
+    this.dailyPattern = pattern;
+    this.dailyMode = true;
+    this.dailyPatternIndex = 0;
   }
 
   spawnTutorialObstacle(type, color, options = {}) {
@@ -284,7 +308,9 @@ class ObstacleManager {
       this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
       return;
     }
-    if (score >= 60) {
+    if (this.dailyMode) {
+      // Daily run: skip gate sections; use pattern for spawns
+    } else if (score >= 60) {
       this.gateSection     = false;
       this.gateSectionLeft = 0;
       // When leaving guided sections, reset so random spacing resumes cleanly.
@@ -304,7 +330,7 @@ class ObstacleManager {
       this.nextInterval      = 0;
     }
 
-    const inGateRun = this.gateSection && this.gateSectionLeft > 0;
+    const inGateRun = !this.dailyMode && this.gateSection && this.gateSectionLeft > 0;
 
     this.spawnTimer += frameScale;
     if (!inGateRun && !this.nextInterval) this.nextInterval = this._computeNextInterval();
@@ -317,67 +343,80 @@ class ObstacleManager {
         this.nextInterval = this._computeNextInterval();
       }
 
-      const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
-      let type     = this.gateSection && this.gateSectionLeft > 0
-        ? 'gate'
-        : types[Math.floor(Math.random() * types.length)];
+      let type, color, options = {};
 
-      const palette = (typeof getActiveColors === 'function')
-        ? getActiveColors()
-        : OBSTACLE_COLORS;
-      let color    = palette[Math.floor(Math.random() * palette.length)];
-      let options  = {};
-
-      if (type === 'gate' && this.gateSection && this.gateSectionLeft > 0) {
-        this.gateSectionLeft--;
-        if (this.gateSectionLeft === 0) this.gateSection = false;
-      }
-
-      if (type === 'rail') {
-        // Precompute a width and ensure this new rail will not overlap an existing one.
-        const minW   = 128;
-        const maxW   = 512;
-        const railW  = Math.round(minW + Math.random() * (maxW - minW));
-        const spawnX = SPAWN_X;
-        const overlapRail = this._overlapsRail(spawnX, railW);
-
-        if (overlapRail) {
-          // Instead of stacking rails, switch to a non-rail obstacle.
-          const nonRailTypes = ['barrel', 'ceiling', 'gate'];
-          type = nonRailTypes[Math.floor(Math.random() * nonRailTypes.length)];
+      if (this.dailyMode) {
+        if (this.dailyPatternIndex >= 75) {
+          // All 75 daily obstacles scheduled; stop spawning
         } else {
-          options.w = railW;
+          const entry = this.dailyPattern[this.dailyPatternIndex];
+          this.dailyPatternIndex++;
+          type = entry.type;
+          color = entry.color;
+          if (entry.w != null) options.w = entry.w;
+          if (type === 'ceiling') {
+            const spawnX = SPAWN_X;
+            const ceilingW = 64;
+            const rail = this._overlapsRail(spawnX, ceilingW);
+            if (rail) {
+              color = rail.color;
+              options.onRail = true;
+            }
+          }
+          this.obstacles.push(new Obstacle(type, color, options));
+          this.obstacleCount++;
         }
-      }
+      } else {
+        const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
+        type     = this.gateSection && this.gateSectionLeft > 0
+          ? 'gate'
+          : types[Math.floor(Math.random() * types.length)];
 
-      if (type === 'ceiling') {
-        // Check if this new ceiling's spawn range overlaps any existing rail.
-        // Because all obstacles scroll at the same speed, their relative X positions
-        // never change, so checking at spawn time is enough.
-        const spawnX   = SPAWN_X;
-        const ceilingW = 64; // matches Obstacle 'ceiling' width
-        const rail     = this._overlapsRail(spawnX, ceilingW);
+        const palette = (typeof getActiveColors === 'function')
+          ? getActiveColors()
+          : OBSTACLE_COLORS;
+        color    = palette[Math.floor(Math.random() * palette.length)];
 
-        if (rail) {
-          // Rail is still on screen — ceiling must match rail color and use rail floor height
-          color   = rail.color;
-          options = { onRail: true };
-        } else {
-          // No active rail — check if one just left the screen recently by seeing if
-          // the last obstacle was a rail. If so, delay this spawn for a buffer.
-          const lastRail = [...this.obstacles].reverse().find(o => o.type === 'rail');
-          if (lastRail && lastRail.right > -100) {
-            // Rail just exited — skip and wait roughly half of whatever the
-            // current randomized interval is.
-            this.spawnTimer = Math.floor(((inGateRun ? this.interval : this.nextInterval) || this.interval) * 0.5);
-            return;
+        if (type === 'gate' && this.gateSection && this.gateSectionLeft > 0) {
+          this.gateSectionLeft--;
+          if (this.gateSectionLeft === 0) this.gateSection = false;
+        }
+
+        if (type === 'rail') {
+          const minW   = 128;
+          const maxW   = 512;
+          const railW  = Math.round(minW + Math.random() * (maxW - minW));
+          const spawnX = SPAWN_X;
+          const overlapRail = this._overlapsRail(spawnX, railW);
+
+          if (overlapRail) {
+            const nonRailTypes = ['barrel', 'ceiling', 'gate'];
+            type = nonRailTypes[Math.floor(Math.random() * nonRailTypes.length)];
+          } else {
+            options.w = railW;
           }
         }
-      }
 
-      this.obstacles.push(new Obstacle(type, color, options));
-      this.obstacleCount++;
-      // Difficulty (speed) no longer auto-increases; player uses meter + ArrowRight.
+        if (type === 'ceiling') {
+          const spawnX   = SPAWN_X;
+          const ceilingW = 64;
+          const rail     = this._overlapsRail(spawnX, ceilingW);
+
+          if (rail) {
+            color   = rail.color;
+            options = { onRail: true };
+          } else {
+            const lastRail = [...this.obstacles].reverse().find(o => o.type === 'rail');
+            if (lastRail && lastRail.right > -100) {
+              this.spawnTimer = Math.floor(((inGateRun ? this.interval : this.nextInterval) || this.interval) * 0.5);
+              return;
+            }
+          }
+        }
+
+        this.obstacles.push(new Obstacle(type, color, options));
+        this.obstacleCount++;
+      }
     }
 
     for (const o of this.obstacles) o.update(this.speed * frameScale);

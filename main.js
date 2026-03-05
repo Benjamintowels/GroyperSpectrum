@@ -1,9 +1,30 @@
+window.onerror = function(msg, url, line, col, err) {
+  var el = document.getElementById('gameLoading');
+  if (el) {
+    el.id = '';
+    el.style.color = '#f88';
+    el.textContent = (msg || 'Error') + (err && err.stack ? '\n' + err.stack : '');
+  }
+  return false;
+};
 const canvas = document.getElementById('gameCanvas');
-const ctx    = canvas.getContext('2d');
+if (!canvas) {
+  document.body.innerHTML = '<p style="color:#f88;font:1.2rem monospace;padding:20px;">Canvas #gameCanvas not found.</p>';
+  throw new Error('Canvas not found');
+}
+const ctx = canvas.getContext('2d');
+if (!ctx) {
+  document.body.innerHTML = '<p style="color:#f88;font:1.2rem monospace;padding:20px;">Could not get 2d context.</p>';
+  throw new Error('No 2d context');
+}
 canvas.width  = 1000;
 canvas.height = 400;
 const VIEW_W  = canvas.width;
 const VIEW_H  = canvas.height;
+
+const API_URL = 'http://45.55.249.232:3000';
+let isDailyRun = false;
+let dailyDate = null;
 
 // Game modes (easy to extend with new entries)
 const MODES = {
@@ -143,6 +164,43 @@ function hitTestModeButton(x, y) {
 
 let runStartTime = null;
 
+async function startDailyRun() {
+  try {
+    const res = await fetch(`${API_URL}/daily-seed`);
+    const data = await res.json();
+    const pattern = obsMgr.generateDailyPattern(data.seed);
+    startRun('race');
+    obsMgr.setDailyPattern(pattern);
+    isDailyRun = true;
+    dailyDate = data.date;
+    const btn = document.getElementById('dailyRunBtn');
+    if (btn) btn.style.display = 'none';
+  } catch (e) {
+    console.error('Daily run failed:', e);
+  }
+}
+
+async function submitDailyScore(score) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  const telegram_user_id = user ? String(user.id) : null;
+  const telegram_username = user ? (user.username || null) : null;
+  try {
+    await fetch(`${API_URL}/submit-score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegram_user_id,
+        telegram_username,
+        score,
+        date: dailyDate,
+      }),
+    });
+  } catch (e) {
+    console.error('Submit daily score failed:', e);
+  }
+}
+
 function startRun(modeId) {
   currentMode = modeId || currentMode || 'endless';
   gameOver    = false;
@@ -196,6 +254,8 @@ function onTouchStart(e) {
   if (gameOver) {
     gameOver    = false;
     startScreen = true;
+    isDailyRun  = false;
+    dailyDate   = null;
     frameCount  = 0;
     score       = 0;
     speedMeter  = 0;
@@ -491,6 +551,7 @@ function checkCollisions() {
 function triggerGameOver() {
   if (gameOver) return;
   gameOver = true;
+  if (isDailyRun) submitDailyScore(score);
   if (currentMode === 'endless' && runStartTime != null) {
     endlessFinishedTime = (Date.now() - runStartTime) / 1000;
   }
@@ -502,8 +563,13 @@ function triggerGameOver() {
 }
 
 function loop(ts) {
+  const loadingEl = document.getElementById('gameLoading');
+  if (loadingEl) loadingEl.remove();
   const dt = Math.min(ts - lastTime, 50);
   lastTime = ts;
+
+  const dailyBtn = document.getElementById('dailyRunBtn');
+  if (dailyBtn) dailyBtn.style.display = startScreen ? 'block' : 'none';
 
   if (startScreen) {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -583,6 +649,7 @@ function loop(ts) {
           if (raceObstaclesCleared >= 75) {
             raceCompletedTime = (Date.now() - raceStartTime) / 1000;
             gameOver = true;
+            if (isDailyRun) submitDailyScore(score);
             if (raceCompletedTime < raceHighScore) {
               raceHighScore = raceCompletedTime;
               localStorage.setItem('gs_race_highscore', String(raceHighScore));
@@ -765,6 +832,8 @@ window.addEventListener('keydown', e => {
   if (gameOver) {
     gameOver    = false;
     startScreen = true;
+    isDailyRun  = false;
+    dailyDate   = null;
     frameCount  = 0;
     score       = 0;
     keysDown.clear();
@@ -773,5 +842,12 @@ window.addEventListener('keydown', e => {
     obsMgr.reset();
   }
 });
+
+(function setupDailyRunButton() {
+  const btn = document.getElementById('dailyRunBtn');
+  if (btn) {
+    btn.addEventListener('click', function() { startDailyRun(); });
+  }
+})();
 
 requestAnimationFrame(loop);
