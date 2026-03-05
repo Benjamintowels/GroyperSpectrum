@@ -12,7 +12,6 @@
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     #gameWrap { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-    body.desktop #gameWrap { width: 1000px; height: 400px; max-width: 100vw; max-height: 100vh; box-shadow: 0 0 0 1px rgba(255,255,255,0.06); }
     canvas { display: block; }
     #rotateOverlay {
       display: none;
@@ -43,19 +42,10 @@
   </div>
   <script>
     (function() {
-      var tg = window.Telegram && window.Telegram.WebApp;
-      var isDesktop = false;
-      if (tg && tg.platform) {
-        var p = tg.platform.toLowerCase();
-        isDesktop = (p !== 'android' && p !== 'ios');
-      }
-      if (isDesktop) document.body.classList.add('desktop');
-
       function isPortrait() { return window.innerWidth < window.innerHeight; }
       function updateRotateOverlay() {
         var el = document.getElementById('rotateOverlay');
-        var show = !isDesktop && isPortrait();
-        if (show) {
+        if (isPortrait()) {
           el.classList.add('portrait');
           el.setAttribute('aria-hidden', 'false');
         } else {
@@ -68,6 +58,7 @@
         if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.lock) {
           screen.orientation.lock('landscape').catch(function() {});
         }
+        var tg = window.Telegram && window.Telegram.WebApp;
         if (tg && tg.lockOrientation && !tg.isOrientationLocked) {
           tg.lockOrientation();
         }
@@ -78,19 +69,20 @@
         if (!isPortrait()) tryLockLandscape();
       });
       updateRotateOverlay();
+      var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) {
         tg.ready();
-        if (!isDesktop) {
-          tg.expand();
-          if (tg.requestFullscreen) tg.requestFullscreen();
-          tg.onEvent('fullscreenChanged', function() {
-            if (tg.isFullscreen) tryLockLandscape();
-          });
-          tg.setHeaderColor && tg.setHeaderColor('#111111');
+        tg.expand();
+        if (tg.requestFullscreen) {
+          tg.requestFullscreen();
         }
+        tg.onEvent('fullscreenChanged', function() {
+          if (tg.isFullscreen) tryLockLandscape();
+        });
+        tg.setHeaderColor && tg.setHeaderColor('#111111');
       }
       if (!isPortrait()) tryLockLandscape();
-      if (!isDesktop) setTimeout(tryLockLandscape, 500);
+      setTimeout(tryLockLandscape, 500);
     })();
   </script>
   <script src="background.js"></script>
