@@ -28,6 +28,27 @@ let dailyDate = null;
 let dailyRunErrorMsg = null;
 let dailyRunErrorAt = 0;
 
+function getTodayDateString() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function getDailyRunMarkerState() {
+  const key = 'gs_daily_' + getTodayDateString();
+  const completed = localStorage.getItem(key);
+  return completed !== null ? parseFloat(completed, 10) : null;
+}
+
+function setDailyRunCompleted(timeSeconds) {
+  localStorage.setItem('gs_daily_' + getTodayDateString(), String(timeSeconds));
+}
+
+function formatRaceTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toFixed(2);
+  return m + ':' + s.padStart(5, '0');
+}
+
 // Game modes (easy to extend with new entries)
 const MODES = {
   endless: {
@@ -596,6 +617,9 @@ function loop(ts) {
   lastTime = ts;
 
   const dailyBtn = document.getElementById('dailyRunBtn');
+  const dailyMarker = document.getElementById('dailyRunMarker');
+  const dailyMarkerBox = document.getElementById('dailyRunMarkerBox');
+  const dailyMarkerText = document.getElementById('dailyRunMarkerText');
   if (dailyBtn) {
     dailyBtn.style.display = startScreen ? 'block' : 'none';
     if (startScreen && canvas) {
@@ -606,6 +630,30 @@ function loop(ts) {
         dailyBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
         dailyBtn.style.left = (rect.left - wrap.left + rect.width / 2) + 'px';
       }
+    }
+  }
+  if (dailyMarker && dailyMarkerBox && dailyMarkerText) {
+    if (startScreen && dailyBtn && dailyBtn.style.display !== 'none') {
+      const completedTime = getDailyRunMarkerState();
+      if (completedTime !== null) {
+        dailyMarkerBox.style.background = '#2a8';
+        dailyMarkerBox.style.border = '2px solid #2a8';
+        dailyMarkerText.textContent = formatRaceTime(completedTime);
+      } else {
+        dailyMarkerBox.style.background = 'transparent';
+        dailyMarkerBox.style.border = '2px solid #e44';
+        dailyMarkerText.textContent = 'Incompleted';
+      }
+      const wrap = canvas && canvas.parentElement && canvas.parentElement.getBoundingClientRect();
+      const btnRect = dailyBtn.getBoundingClientRect();
+      if (wrap) {
+        dailyMarker.style.display = 'flex';
+        dailyMarker.style.left = (btnRect.right - wrap.left + 10) + 'px';
+        dailyMarker.style.top = (btnRect.top - wrap.top + btnRect.height / 2) + 'px';
+        dailyMarker.style.transform = 'translateY(-50%)';
+      }
+    } else {
+      dailyMarker.style.display = 'none';
     }
   }
 
@@ -695,7 +743,10 @@ function loop(ts) {
           if (raceObstaclesCleared >= 75) {
             raceCompletedTime = (Date.now() - raceStartTime) / 1000;
             gameOver = true;
-            if (isDailyRun) submitDailyScore(score);
+            if (isDailyRun) {
+              submitDailyScore(score);
+              setDailyRunCompleted(raceCompletedTime);
+            }
             if (raceCompletedTime < raceHighScore) {
               raceHighScore = raceCompletedTime;
               localStorage.setItem('gs_race_highscore', String(raceHighScore));

@@ -54,6 +54,10 @@
     <p id="gameLoading" style="position:absolute;color:#888;font:1rem monospace;z-index:5;">Loading...</p>
     <canvas id="gameCanvas" width="1000" height="400"></canvas>
     <button type="button" id="dailyRunBtn" style="display: none; position: absolute; left: 50%; transform: translate(-50%, -50%); padding: 12px 28px; font: bold 1rem monospace; color: #fff; background: #28f; border: 2px solid #5af; border-radius: 8px; cursor: pointer; z-index: 100; pointer-events: auto; touch-action: manipulation;">DAILY RUN</button>
+    <span id="dailyRunMarker" style="display: none; position: absolute; left: 0; top: 0; align-items: center; gap: 6px; font: bold 0.75rem monospace; color: #fff; z-index: 100; pointer-events: none; white-space: nowrap;">
+      <span id="dailyRunMarkerBox" style="width: 14px; height: 14px; flex-shrink: 0; box-sizing: border-box;"></span>
+      <span id="dailyRunMarkerText"></span>
+    </span>
   </div>
   <script>
     (function() {
