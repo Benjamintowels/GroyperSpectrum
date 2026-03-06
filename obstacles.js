@@ -221,12 +221,16 @@ class ObstacleManager {
     const rng = new SeededRandom(seed);
     const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
     const colors = OBSTACLE_COLORS;
+    const minMul = 0.7;
+    const maxMul = 2.4;
     const pattern = [];
     for (let i = 0; i < 75; i++) {
       const type = rng.pick(types);
       const color = rng.pick(colors);
       const entry = { type, color };
       if (type === 'rail') entry.w = rng.nextInt(128, 512);
+      const r = rng.next();
+      entry.gapMul = minMul + (maxMul - minMul) * (r * r);
       pattern.push(entry);
     }
     return pattern;
@@ -236,6 +240,9 @@ class ObstacleManager {
     this.dailyPattern = pattern;
     this.dailyMode = true;
     this.dailyPatternIndex = 0;
+    if (pattern && pattern[0]) {
+      this.nextInterval = this.interval * pattern[0].gapMul;
+    }
   }
 
   spawnTutorialObstacle(type, color, options = {}) {
@@ -339,9 +346,6 @@ class ObstacleManager {
 
     if (this.spawnTimer >= threshold) {
       this.spawnTimer = 0;
-      if (!inGateRun) {
-        this.nextInterval = this._computeNextInterval();
-      }
 
       let type, color, options = {};
 
@@ -365,8 +369,11 @@ class ObstacleManager {
           }
           this.obstacles.push(new Obstacle(type, color, options));
           this.obstacleCount++;
+          const nextEntry = this.dailyPattern[this.dailyPatternIndex];
+          if (nextEntry) this.nextInterval = this.interval * nextEntry.gapMul;
         }
       } else {
+        this.nextInterval = this._computeNextInterval();
         const types = ['barrel', 'ceiling', 'gate', 'rail', 'gap'];
         type     = this.gateSection && this.gateSectionLeft > 0
           ? 'gate'
