@@ -22,6 +22,9 @@ canvas.height = 400;
 const VIEW_W  = canvas.width;
 const VIEW_H  = canvas.height;
 
+const titleImage = new Image();
+titleImage.src = 'Assets/TitleImage.png';
+
 const API_URL = 'https://outstanding-gain-earth-wants.trycloudflare.com';
 let isDailyRun = false;
 let dailyDate = null;
@@ -179,25 +182,35 @@ function getTouchKey(x, y) {
 }
 
 function getModeButtons() {
-  const btnW     = 260;
-  const btnH     = 48;
-  const spacing  = 16;
-  const startY   = 110;
-  const centerX  = VIEW_W / 2 - btnW / 2;
-  const buttons  = [];
-  const entries  = [MODES.endless, MODES.adventure, MODES.race, MODES.tutorial];
-  for (let i = 0; i < entries.length; i++) {
-    const m = entries[i];
+  const btnW      = 260;
+  const btnH      = 48;
+  const spacing   = 16;
+  const centerX   = VIEW_W / 2 - btnW / 2;
+  const columnStartY = 168;
+  const buttons   = [];
+  const columnModes = [MODES.endless, MODES.adventure, MODES.race];
+  for (let i = 0; i < columnModes.length; i++) {
+    const m = columnModes[i];
     buttons.push({
       modeId: m.id,
       label:  m.label,
       desc:   m.description,
       x:      centerX,
-      y:      startY + i * (btnH + spacing),
+      y:      columnStartY + i * (btnH + spacing),
       w:      btnW,
       h:      btnH,
     });
   }
+  const tutorialW = 200;
+  buttons.push({
+    modeId: MODES.tutorial.id,
+    label:  MODES.tutorial.label,
+    desc:   MODES.tutorial.description,
+    x:      VIEW_W - 20 - tutorialW,
+    y:      VIEW_H - 20 - btnH,
+    w:      tutorialW,
+    h:      btnH,
+  });
   return buttons;
 }
 
@@ -649,7 +662,7 @@ function loop(ts) {
       const rect = canvas.getBoundingClientRect();
       const wrap = canvas.parentElement && canvas.parentElement.getBoundingClientRect();
       if (wrap) {
-        const yRatio = 0.93;
+        const yRatio = 0.30;
         dailyBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
         dailyBtn.style.left = (rect.left - wrap.left + rect.width / 2) + 'px';
       }
@@ -701,18 +714,32 @@ function loop(ts) {
     bg.draw(ctx);
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 1.8rem monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('TOAD RUNNER', VIEW_W / 2, 70);
 
-    // Mode buttons
+    if (titleImage.complete && titleImage.naturalWidth) {
+      const tw = titleImage.naturalWidth, th = titleImage.naturalHeight;
+      const maxH = 80;
+      const scale = maxH / th;
+      const dw = tw * scale, dh = maxH;
+      ctx.drawImage(titleImage, VIEW_W / 2 - dw / 2, 20, dw, dh);
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 1.8rem monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('TOAD RUNNER', VIEW_W / 2, 70);
+    }
+
     const buttons = getModeButtons();
     ctx.font = 'bold 1rem monospace';
     buttons.forEach(b => {
       const isActive = getActiveMode().id === b.modeId;
-      ctx.fillStyle = isActive ? 'rgba(80,180,80,0.9)' : 'rgba(0,0,0,0.75)';
-      ctx.strokeStyle = isActive ? '#7f7' : '#fff';
+      const isTutorial = b.modeId === 'tutorial';
+      if (isTutorial) {
+        ctx.fillStyle = isActive ? 'rgba(220,140,60,0.95)' : '#000';
+        ctx.strokeStyle = isActive ? '#fc8' : '#fa6';
+      } else {
+        ctx.fillStyle = isActive ? 'rgba(80,180,80,0.9)' : '#000';
+        ctx.strokeStyle = isActive ? '#7f7' : '#fff';
+      }
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.roundRect(b.x, b.y, b.w, b.h, 8);
@@ -723,32 +750,17 @@ function loop(ts) {
       ctx.fillText(b.label.toUpperCase(), b.x + b.w / 2, b.y + b.h / 2 + 4);
     });
 
-    ctx.font = 'bold 0.8rem monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('PRESS ANY KEY TO START CURRENT MODE', VIEW_W / 2, 355);
-
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText('CONTROLS', 120, 200);
+    ctx.fillText('CONTROLS', 80, 200);
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '10px monospace';
-    ctx.fillText('ASDF — swap colors (varies by mode)', 120, 216);
-    ctx.fillText('↑ — jump (hold for height)', 120, 230);
-    ctx.fillText('↓ — duck on ground / cancel jump in air', 120, 244);
-    ctx.fillText('→ — boost speed when meter is full (5 obstacles)', 120, 258);
-    ctx.fillText('← — slow down one notch', 120, 272);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText('OBSTACLES', 120, 288);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = '10px monospace';
-    ctx.fillText('Barrel — jump + match color', 120, 304);
-    ctx.fillText('Ceiling — duck + match color', 120, 318);
-    ctx.fillText('Gate — match color, do not jump', 120, 332);
-    ctx.fillText('Rail — jump onto + match color to grind', 120, 346);
-    ctx.fillText('Gap — jump over (touch = death)', 120, 360);
+    ctx.fillText('ASDF — swap colors (varies by mode)', 80, 216);
+    ctx.fillText('↑ — jump (hold for height)', 80, 230);
+    ctx.fillText('↓ — duck on ground / cancel jump in air', 80, 244);
+    ctx.fillText('→ — boost speed when meter is full (5 obstacles)', 80, 258);
+    ctx.fillText('← — slow down one notch', 80, 272);
 
     if (dailyRunErrorMsg && Date.now() - dailyRunErrorAt < 5000) {
       ctx.fillStyle = 'rgba(200, 80, 80, 0.95)';
