@@ -25,8 +25,10 @@ class Player {
     this.tweens      = [];
     this.cancelling  = false;
     this.peaking     = false;
-    this.activeRail  = null;
-    this.lurchX      = 0;  // draw-only offset for speed-boost lurch (hitbox stays at P_X)
+    this.activeRail    = null;
+    this.lurchX        = 0;  // draw-only offset for speed-boost lurch (hitbox stays at P_X)
+    this.railLurchX   = 0;  // draw-only offset when ducking on rail (tween forward, then back on stand/leave)
+    this.railLurchTween = null;  // { from, to, dur, ease, elapsed } for rail duck lurch
   }
 
   get h()      { return this.isDucking ? P_DUCK_H : P_H; }
@@ -85,6 +87,7 @@ class Player {
     this.activeRail = null;
     this.groundY    = GROUND_Y;
     const down      = isKeyDown('ArrowDown');
+    this._startRailLurchReturn();
     // Small tween to drop back to ground
     this._tween(this.y, GROUND_Y, 180, t => t**2, v => { this.y = v; }, () => {
       this.y     = GROUND_Y;
@@ -110,6 +113,33 @@ class Player {
     this._tween(0, lurchDist, outDur, t => 1 - (1 - t) ** 2, v => { this.lurchX = v; }, () => {
       this._tween(lurchDist, 0, backDur, t => t * t, v => { this.lurchX = v; }, null);
     });
+  }
+
+  // Rail duck lurch: tween forward (slower than boost) while holding down on rail; return at same rate as boost (590ms).
+  _startRailLurchForward() {
+    const target = 28;
+    const dur    = 420;
+    if (this.railLurchX >= target - 1) return;
+    if (this.railLurchTween && this.railLurchTween.to === target) return;
+    this.railLurchTween = {
+      from: this.railLurchX, to: target, dur,
+      ease: t => 1 - (1 - t) ** 2,
+      elapsed: 0,
+    };
+  }
+
+  _startRailLurchReturn() {
+    const backDur = 590;
+    if (this.railLurchX <= 0) {
+      this.railLurchTween = null;
+      return;
+    }
+    if (this.railLurchTween && this.railLurchTween.to === 0) return;
+    this.railLurchTween = {
+      from: this.railLurchX, to: 0, dur: backDur,
+      ease: t => t * t,
+      elapsed: 0,
+    };
   }
 
   _startJump() {
@@ -173,6 +203,21 @@ class Player {
       this.groundY = this.activeRail.top;
     }
 
+    const duckOnRail = this.state === 'duck' && this.activeRail;
+    if (duckOnRail) this._startRailLurchForward();
+    else if (this.railLurchX > 0) this._startRailLurchReturn();
+
+    if (this.railLurchTween) {
+      const t = this.railLurchTween;
+      t.elapsed = Math.min(t.elapsed + dt, t.dur);
+      const p = t.elapsed / t.dur;
+      this.railLurchX = t.from + (t.to - t.from) * t.ease(p);
+      if (t.elapsed >= t.dur) {
+        this.railLurchX = t.to;
+        this.railLurchTween = null;
+      }
+    }
+
     const active = [];
     for (const t of this.tweens) {
       t.elapsed = Math.min(t.elapsed + dt, t.dur);
@@ -187,7 +232,7 @@ class Player {
   draw(ctx) {
     const h   = this.h;
     const top = this.y - h;
-    const x   = P_X + this.lurchX;
+    const x   = P_X + this.lurchX + this.railLurchX;
 
     ctx.fillStyle = COLORS[this.color];
     ctx.fillRect(x, top, P_W, h);

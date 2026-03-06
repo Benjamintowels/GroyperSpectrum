@@ -788,6 +788,7 @@ function loop(ts) {
     for (const obs of obsMgr.obstacles) {
       if (!obs.scored && obs.right < player.left) {
         obs.scored = true;
+        obs.clearFlashStart = performance.now();
         score++;
         if (currentMode === 'race') {
           raceObstaclesCleared++;

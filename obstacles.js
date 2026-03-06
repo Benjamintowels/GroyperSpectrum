@@ -12,12 +12,30 @@ const RAIL_HEIGHT       = 8;
 const RAIL_Y            = GROUND_Y - P_H;
 const SCROLL_SPEED_MULT = 7; // base scroll speed multiplier
 
+const CLEAR_FLASH_DURATION_MS = 400;
+
+function hexToRgb(hex) {
+  hex = hex.slice(1);
+  if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  return {
+    r: parseInt(hex.slice(0, 2), 16),
+    g: parseInt(hex.slice(2, 4), 16),
+    b: parseInt(hex.slice(4, 6), 16),
+  };
+}
+
+function brightenHex(hex, factor) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgb(${Math.min(255, Math.round(r * factor))},${Math.min(255, Math.round(g * factor))},${Math.min(255, Math.round(b * factor))})`;
+}
+
 class Obstacle {
   constructor(type, color, options = {}) {
     this.type  = type;
     this.color = color;
     this.x     = SPAWN_X;
     this.scored = false;
+    this.clearFlashStart = null;  // set when officially cleared (scored) for brighten-tween cue
     this.clearedForMeter = false;  // set true when player clears gate (through) or barrel (jump + color)
 
     if (type === 'barrel') {
@@ -71,7 +89,13 @@ class Obstacle {
   }
 
   draw(ctx) {
-    const c = COLORS_MAP[this.color];
+    let c = COLORS_MAP[this.color];
+    if (this.clearFlashStart != null && this.type !== 'gap') {
+      const elapsed = performance.now() - this.clearFlashStart;
+      const t = Math.min(1, elapsed / CLEAR_FLASH_DURATION_MS);
+      const brightness = 1 + 0.55 * (1 - t) * (1 - t);
+      c = brightenHex(c, brightness);
+    }
 
     if (this.type === 'barrel') {
       ctx.fillStyle = c;
@@ -111,7 +135,7 @@ class Obstacle {
       ctx.fillRect(this.x, this.y, pw, this.h);
       ctx.fillRect(this.x + this.w - pw, this.y, pw, this.h);
       ctx.fillRect(this.x, this.y, this.w, 7);
-      ctx.fillStyle = c + '55';
+      ctx.fillStyle = c.startsWith('rgb') ? c.replace(')', ', 0.33)').replace('rgb(', 'rgba(') : c + '55';
       ctx.fillRect(this.x + pw, this.y + 7, this.w - pw * 2, this.h - 7);
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';
       ctx.lineWidth = 1.5;
