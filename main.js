@@ -276,6 +276,7 @@ function startRun(modeId) {
   frameCount  = 0;
   score       = 0;
   speedMeter  = 0;
+  hitInvincibleUntilTime = 0;
   raceCompletedTime = null;
   endlessFinishedTime = null;
   runStartTime = Date.now();
@@ -411,8 +412,10 @@ let raceObstaclesCleared = 0;   // 0..75
 let raceCompletedTime = null;  // seconds when finished 75
 let endlessFinishedTime = null;  // seconds when endless run ended (frozen for FINISHED screen)
 let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
+let hitInvincibleUntilTime = 0;  // performance.now() until which obstacle hits are ignored after a speed knock
 
 const METER_MAX = 5;
+const HIT_INVINCIBILITY_MS = 800;  // 0.8s after a knock before another hit can apply (same on all devices)
 const METER_RECT = { x: VIEW_W - 140, y: 14, w: 120, h: 28 };
 
 // Tutorial state
@@ -609,7 +612,14 @@ function checkCollisions() {
       // Landing on rail
       if (obs.overlaps(player)) {
         if (!obs.playerSurvives(player)) {
-          triggerGameOver();
+          if (performance.now() >= hitInvincibleUntilTime) {
+            if (obsMgr.difficulty > 0) {
+              obsMgr.decreaseSpeed();
+              hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+            } else {
+              triggerGameOver();
+            }
+          }
         } else {
           player.landOnRail(obs);
         }
@@ -624,8 +634,20 @@ function checkCollisions() {
       if (obs.type === 'barrel' && hOverlap && player.state === 'jump' && player.color === obs.color) obs.clearedForMeter = true;
       continue;
     }
-    if (!obs.playerSurvives(player)) triggerGameOver();
-    else if (obs.type === 'gate' || obs.type === 'barrel') obs.clearedForMeter = true;
+    if (obs.type === 'gap') {
+      triggerGameOver();
+      return;
+    }
+    if (!obs.playerSurvives(player)) {
+      if (performance.now() >= hitInvincibleUntilTime) {
+        if (obsMgr.difficulty > 0) {
+          obsMgr.decreaseSpeed();
+          hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+        } else {
+          triggerGameOver();
+        }
+      }
+    } else if (obs.type === 'gate' || obs.type === 'barrel') obs.clearedForMeter = true;
   }
 
   // Color swap on rail check is handled inside player.handleInput
@@ -815,7 +837,14 @@ function loop(ts) {
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
   bg.draw(ctx);
   obsMgr.draw(ctx);
-  player.draw(ctx);
+  if (performance.now() < hitInvincibleUntilTime) {
+    ctx.save();
+    ctx.globalAlpha = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(performance.now() / 80));
+    player.draw(ctx);
+    ctx.restore();
+  } else {
+    player.draw(ctx);
+  }
 
   // Score HUD (or Race HUD when in race mode)
   ctx.fillStyle = '#fff';
