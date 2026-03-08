@@ -645,9 +645,16 @@ function checkCollisions() {
       continue;
     }
     if (obs.type === 'gap') {
-      diedFromDamage = true;
-      triggerGameOver();
-      return;
+      if (performance.now() >= hitInvincibleUntilTime) {
+        if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
+        hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+        hearts--;
+        if (hearts <= 0) {
+          diedFromDamage = true;
+          triggerGameOver();
+        }
+      }
+      continue;
     }
     if (!obs.playerSurvives(player)) {
       if (performance.now() >= hitInvincibleUntilTime) {

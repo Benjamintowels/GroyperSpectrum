@@ -13,8 +13,27 @@ const P_X         = 110;
 const JUMP_HEIGHT = 105;
 const JUMP_HALF   = 210;
 
+const SPRITE_FRAME_W = 48;
+const SPRITE_FRAME_H = 64;
+const ANIM_FRAME_MS  = 80;
+
+const TOAD_SPRITES = {
+  idle:  { frames: 8,  path: 'Assets/ToadSprites/GreenToadIdle.png' },
+  duck:  { frames: 5,  path: 'Assets/ToadSprites/GreenToadDuck.png' },
+  jump:  { frames: 8,  path: 'Assets/ToadSprites/GreenToadJump.png' },
+  boost: { frames: 8,  path: 'Assets/ToadSprites/GreenToadBoost.png' },
+};
+
 class Player {
-  constructor() { this.reset(); }
+  constructor() {
+    this.spriteSheets = {};
+    for (const [name, cfg] of Object.entries(TOAD_SPRITES)) {
+      const img = new Image();
+      img.src = cfg.path;
+      this.spriteSheets[name] = { img, frames: cfg.frames };
+    }
+    this.reset();
+  }
 
   reset() {
     this.color       = 'green';
@@ -29,6 +48,11 @@ class Player {
     this.lurchX        = 0;  // draw-only offset for speed-boost lurch (hitbox stays at P_X)
     this.railLurchX   = 0;  // draw-only offset when ducking on rail (tween forward, then back on stand/leave)
     this.railLurchTween = null;  // { from, to, dur, ease, elapsed } for rail duck lurch
+    this.animState     = 'idle';
+    this.animFrame     = 0;
+    this.animTime      = 0;
+    this.duckReversing = false;
+    this.boostAnimPlaying = false;
   }
 
   get h()      { return this.isDucking ? P_DUCK_H : P_H; }
@@ -107,6 +131,10 @@ class Player {
 
   // Visual only: lurch forward then tween back when player uses speed boost.
   playBoostLurch() {
+    this.boostAnimPlaying = true;
+    this.animState        = 'boost';
+    this.animFrame        = 0;
+    this.animTime         = 0;
     const lurchDist = 28;
     const outDur    = 55;
     const backDur   = 590;
@@ -196,6 +224,69 @@ class Player {
     this.tweens.push({ from, to, dur, ease, onUpd, onDone, elapsed: 0 });
   }
 
+  _updateAnimation(dt) {
+    if (this.boostAnimPlaying && (this.state === 'jump' || this.isDucking)) {
+      this.boostAnimPlaying = false;
+    }
+
+    let desired = 'idle';
+    if (this.boostAnimPlaying) desired = 'boost';
+    else if (this.state === 'jump' && this.isDucking) desired = 'duck';
+    else if (this.state === 'jump') desired = 'jump';
+    else if (this.state === 'duck' || ((this.state === 'run' || this.state === 'grind') && this.isDucking)) desired = 'duck';
+
+    if (this.animState === 'duck' && !this.isDucking && !this.duckReversing) {
+      this.duckReversing = true;
+    }
+
+    if (desired !== this.animState) {
+      if (this.animState === 'duck' && this.duckReversing) {
+        // let reverse finish
+      } else {
+        this.animState = desired;
+        this.animFrame = 0;
+        this.animTime  = 0;
+        if (desired === 'duck') this.duckReversing = false;
+      }
+    }
+
+    this.animTime += dt;
+    while (this.animTime >= ANIM_FRAME_MS) {
+      this.animTime -= ANIM_FRAME_MS;
+      if (this.animState === 'idle') {
+        this.animFrame = (this.animFrame + 1) % 8;
+      } else if (this.animState === 'boost') {
+        this.animFrame++;
+        if (this.animFrame >= 8) {
+          this.boostAnimPlaying = false;
+          this.animState = 'idle';
+          this.animFrame = 0;
+        }
+      } else if (this.animState === 'jump') {
+        this.animFrame++;
+        if (this.animFrame >= 8) {
+          this.animState = 'idle';
+          this.animFrame = 0;
+        }
+      } else if (this.animState === 'duck') {
+        if (this.duckReversing) {
+          this.animFrame--;
+          if (this.animFrame < 0) {
+            this.animFrame = 0;
+            this.duckReversing = false;
+            this.animState = 'idle';
+          }
+        } else {
+          if (this.animFrame < 4) {
+            this.animFrame++;
+          } else {
+            this.animFrame = this.animFrame === 4 ? 3 : 4;
+          }
+        }
+      }
+    }
+  }
+
   update(dt) {
     // If grinding, keep player snapped to rail as it scrolls
     if (this.state === 'grind' && this.activeRail) {
@@ -227,6 +318,8 @@ class Player {
       else if (t.onDone) t.onDone();
     }
     this.tweens = active;
+
+    this._updateAnimation(dt);
   }
 
   draw(ctx) {
@@ -234,18 +327,28 @@ class Player {
     const top = this.y - h;
     const x   = P_X + this.lurchX + this.railLurchX;
 
-    ctx.fillStyle = COLORS[this.color];
-    ctx.fillRect(x, top, P_W, h);
+    const sheet = this.spriteSheets[this.animState];
+    const img   = sheet && sheet.img;
+    if (img && img.complete && img.naturalWidth) {
+      const frame = Math.min(this.animFrame, sheet.frames - 1);
+      const sx = frame * SPRITE_FRAME_W;
+      ctx.drawImage(
+        img,
+        sx, 0, SPRITE_FRAME_W, SPRITE_FRAME_H,
+        x - (SPRITE_FRAME_W - P_W) / 2, this.y - SPRITE_FRAME_H + 7,
+        SPRITE_FRAME_W, SPRITE_FRAME_H
+      );
+    } else {
+      ctx.fillStyle = COLORS[this.color];
+      ctx.fillRect(x, top, P_W, h);
+      ctx.fillStyle = '#000';
+      if (!this.isDucking) ctx.fillRect(x + P_W - 13, top + 9, 6, 6);
+      else ctx.fillRect(x + P_W - 13, top + 5, 6, 4);
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth   = 1.5;
+      ctx.strokeRect(x, top, P_W, h);
+    }
 
-    ctx.fillStyle = '#000';
-    if (!this.isDucking) ctx.fillRect(x + P_W - 13, top + 9, 6, 6);
-    else ctx.fillRect(x + P_W - 13, top + 5, 6, 4);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth   = 1.5;
-    ctx.strokeRect(x, top, P_W, h);
-
-    // Debug state label
     ctx.fillStyle   = '#fff';
     ctx.font        = 'bold 9px monospace';
     ctx.textAlign   = 'center';
