@@ -17,20 +17,45 @@ const SPRITE_FRAME_W = 48;
 const SPRITE_FRAME_H = 64;
 const ANIM_FRAME_MS  = 80;
 
-const TOAD_SPRITES = {
-  idle:  { frames: 8,  path: 'Assets/ToadSprites/GreenToadIdle.png' },
-  duck:  { frames: 5,  path: 'Assets/ToadSprites/GreenToadDuck.png' },
-  jump:  { frames: 8,  path: 'Assets/ToadSprites/GreenToadJump.png' },
-  boost: { frames: 8,  path: 'Assets/ToadSprites/GreenToadBoost.png' },
+const TOAD_FRAMES = { idle: 8, duck: 3, jump: 8, boost: 8 };
+
+const TOAD_SPRITE_PATHS = {
+  green: {
+    idle:  'Assets/ToadSprites/GreenToadIdle.png',
+    duck:  'Assets/ToadSprites/GreenToadDuck.png',
+    jump:  'Assets/ToadSprites/GreenToadJump.png',
+    boost: 'Assets/ToadSprites/GreenToadBoost.png',
+  },
+  blue: {
+    idle:  'Assets/ToadSprites/BlueToadIdle.png',
+    duck:  'Assets/ToadSprites/BlueToadDuck.png',
+    jump:  'Assets/ToadSprites/BlueToadJump.png',
+    boost: 'Assets/ToadSprites/BlueToadBoost.png',
+  },
+  black: {
+    idle:  'Assets/ToadSprites/BlackToadIdle.png',
+    duck:  'Assets/ToadSprites/BlackToadDuck.png',
+    jump:  'Assets/ToadSprites/BlackToadJump.png',
+    boost: 'Assets/ToadSprites/BlackToadBoost.png',
+  },
+  white: {
+    idle:  'Assets/ToadSprites/WhiteToadIdle.png',
+    duck:  'Assets/ToadSprites/WhiteToadDuck.png',
+    jump:  'Assets/ToadSprites/WhiteToadJump.png',
+    boost: 'Assets/ToadSprites/WhiteToadBoost.png',
+  },
 };
 
 class Player {
   constructor() {
     this.spriteSheets = {};
-    for (const [name, cfg] of Object.entries(TOAD_SPRITES)) {
-      const img = new Image();
-      img.src = cfg.path;
-      this.spriteSheets[name] = { img, frames: cfg.frames };
+    for (const [color, paths] of Object.entries(TOAD_SPRITE_PATHS)) {
+      this.spriteSheets[color] = {};
+      for (const [anim, path] of Object.entries(paths)) {
+        const img = new Image();
+        img.src = path;
+        this.spriteSheets[color][anim] = { img, frames: TOAD_FRAMES[anim] };
+      }
     }
     this.reset();
   }
@@ -131,10 +156,12 @@ class Player {
 
   // Visual only: lurch forward then tween back when player uses speed boost.
   playBoostLurch() {
-    this.boostAnimPlaying = true;
-    this.animState        = 'boost';
-    this.animFrame        = 0;
-    this.animTime         = 0;
+    if (!this.isDucking) {
+      this.boostAnimPlaying = true;
+      this.animState        = 'boost';
+      this.animFrame        = 0;
+      this.animTime         = 0;
+    }
     const lurchDist = 28;
     const outDur    = 55;
     const backDur   = 590;
@@ -277,10 +304,10 @@ class Player {
             this.animState = 'idle';
           }
         } else {
-          if (this.animFrame < 4) {
+          if (this.animFrame < 2) {
             this.animFrame++;
           } else {
-            this.animFrame = this.animFrame === 4 ? 3 : 4;
+            this.animFrame = this.animFrame === 2 ? 1 : 2;
           }
         }
       }
@@ -327,8 +354,9 @@ class Player {
     const top = this.y - h;
     const x   = P_X + this.lurchX + this.railLurchX;
 
-    const sheet = this.spriteSheets[this.animState];
-    const img   = sheet && sheet.img;
+    const byColor = this.spriteSheets[this.color] || this.spriteSheets['green'];
+    const sheet   = byColor && byColor[this.animState];
+    const img     = sheet && sheet.img;
     if (img && img.complete && img.naturalWidth) {
       const frame = Math.min(this.animFrame, sheet.frames - 1);
       const sx = frame * SPRITE_FRAME_W;
