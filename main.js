@@ -277,6 +277,9 @@ function startRun(modeId) {
   score       = 0;
   speedMeter  = 0;
   hitInvincibleUntilTime = 0;
+  hearts      = MAX_HEARTS;
+  diedFromDamage = false;
+  deathTimeSeconds = null;
   raceCompletedTime = null;
   endlessFinishedTime = null;
   runStartTime = Date.now();
@@ -333,6 +336,8 @@ function onTouchStart(e) {
     startScreen = true;
     isDailyRun  = false;
     dailyDate   = null;
+    diedFromDamage = false;
+    deathTimeSeconds = null;
     frameCount  = 0;
     score       = 0;
     speedMeter  = 0;
@@ -413,8 +418,12 @@ let raceCompletedTime = null;  // seconds when finished 75
 let endlessFinishedTime = null;  // seconds when endless run ended (frozen for FINISHED screen)
 let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
 let hitInvincibleUntilTime = 0;  // performance.now() until which obstacle hits are ignored after a speed knock
+let hearts = 3;
+let diedFromDamage = false;   // true when game over from hearts or gap (show "You have died" screen)
+let deathTimeSeconds = null;  // time of death when diedFromDamage (seconds)
 
 const METER_MAX = 5;
+const MAX_HEARTS = 3;
 const HIT_INVINCIBILITY_MS = 800;  // 0.8s after a knock before another hit can apply (same on all devices)
 const METER_RECT = { x: VIEW_W - 140, y: 14, w: 120, h: 28 };
 
@@ -613,10 +622,11 @@ function checkCollisions() {
       if (obs.overlaps(player)) {
         if (!obs.playerSurvives(player)) {
           if (performance.now() >= hitInvincibleUntilTime) {
-            if (obsMgr.difficulty > 0) {
-              obsMgr.decreaseSpeed();
-              hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
-            } else {
+            if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
+            hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+            hearts--;
+            if (hearts <= 0) {
+              diedFromDamage = true;
               triggerGameOver();
             }
           }
@@ -635,15 +645,17 @@ function checkCollisions() {
       continue;
     }
     if (obs.type === 'gap') {
+      diedFromDamage = true;
       triggerGameOver();
       return;
     }
     if (!obs.playerSurvives(player)) {
       if (performance.now() >= hitInvincibleUntilTime) {
-        if (obsMgr.difficulty > 0) {
-          obsMgr.decreaseSpeed();
-          hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
-        } else {
+        if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
+        hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+        hearts--;
+        if (hearts <= 0) {
+          diedFromDamage = true;
           triggerGameOver();
         }
       }
@@ -651,21 +663,26 @@ function checkCollisions() {
   }
 
   // Color swap on rail check is handled inside player.handleInput
-  if (player.state === 'dead') triggerGameOver();
+  if (player.state === 'dead') {
+    diedFromDamage = true;
+    triggerGameOver();
+  }
 }
 
 function triggerGameOver() {
   if (gameOver) return;
   gameOver = true;
+  if (diedFromDamage && runStartTime != null) {
+    deathTimeSeconds = (Date.now() - runStartTime) / 1000;
+  }
   if (isDailyRun) submitDailyScore(score);
-  if (currentMode === 'endless' && runStartTime != null) {
+  if (currentMode === 'endless' && runStartTime != null && !diedFromDamage) {
     endlessFinishedTime = (Date.now() - runStartTime) / 1000;
   }
   if (score > highScore) {
     highScore = score;
     localStorage.setItem('gs_highscore', String(highScore));
   }
-  console.log('DEAD — player color:', player.color, '| state:', player.state);
 }
 
 function loop(ts) {
@@ -846,6 +863,18 @@ function loop(ts) {
     player.draw(ctx);
   }
 
+  // Hearts (top of HUD) — only during active play
+  if (!startScreen && !gameOver) {
+    const heartX = VIEW_W / 2 - (MAX_HEARTS * 14) / 2 + 7;
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < MAX_HEARTS; i++) {
+      ctx.fillStyle = i < hearts ? '#e44' : 'rgba(80,40,40,0.8)';
+      ctx.fillText('♥', heartX + i * 14, 22);
+    }
+    ctx.textAlign = 'left';
+  }
+
   // Score HUD (or Race HUD when in race mode)
   ctx.fillStyle = '#fff';
   ctx.font      = 'bold 16px monospace';
@@ -951,7 +980,21 @@ function loop(ts) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.textAlign = 'center';
-    if (currentMode === 'race' && raceCompletedTime != null) {
+    if (diedFromDamage) {
+      ctx.fillStyle = '#f44';
+      ctx.font = 'bold 2.2rem monospace';
+      ctx.fillText('You have died', VIEW_W / 2, VIEW_H / 2 - 36);
+      ctx.font = 'bold 1.2rem monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`Obstacles cleared: ${score}`, VIEW_W / 2, VIEW_H / 2);
+      const t = deathTimeSeconds != null ? deathTimeSeconds : 0;
+      const m = Math.floor(t / 60);
+      const s = (t % 60).toFixed(2);
+      ctx.fillText(`Time: ${m}:${s.padStart(5, '0')}`, VIEW_W / 2, VIEW_H / 2 + 28);
+      ctx.font = 'bold 1rem monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('Press any key to return to main menu', VIEW_W / 2, VIEW_H / 2 + 72);
+    } else if (currentMode === 'race' && raceCompletedTime != null) {
       ctx.fillStyle = '#4f4';
       ctx.font = 'bold 2.2rem monospace';
       ctx.fillText('COMPLETE', VIEW_W / 2, VIEW_H / 2 - 24);
@@ -1012,6 +1055,8 @@ window.addEventListener('keydown', e => {
     startScreen = true;
     isDailyRun  = false;
     dailyDate   = null;
+    diedFromDamage = false;
+    deathTimeSeconds = null;
     frameCount  = 0;
     score       = 0;
     keysDown.clear();
