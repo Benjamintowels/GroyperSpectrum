@@ -25,7 +25,7 @@ const VIEW_H  = canvas.height;
 const titleImage = new Image();
 titleImage.src = 'Assets/TitleImage.png';
 
-const API_URL = 'https://outstanding-gain-earth-wants.trycloudflare.com';
+const API_URL = 'https://distribute-acquire-floating-wage.trycloudflare.com';
 let isDailyRun = false;
 let dailyDate = null;
 let dailyRunErrorMsg = null;
