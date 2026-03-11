@@ -148,35 +148,45 @@ function isKeyDown(code) {
 window.addEventListener('keydown', e => { keysDown.add(e.code); e.preventDefault(); });
 window.addEventListener('keyup',   e => keysDown.delete(e.code));
 
-// Touch layout: right = up/down, left = diamond (4 colors)
+// Touch layout: right = swipe zone (jump/duck/boost), left = horizontal color row
 const TOUCH = {
+  // X coordinate where "right side" begins (used for swipe / tap actions)
   rightX: 520,
-  splitY: 200,
-  diamondCenter: { x: 160, y: 200 },
-  diamondRadius: 80,
+  // Color buttons (ASDF) row config — bottom-left horizontal line
   buttonRadius: 44,
+  colorRowStartX: 80,
+  colorRowY: VIEW_H - 40,
+  colorRowSpacing: 108, // horizontal distance between button centers
   colorKeys: [
-    { x: 0, y: -1, code: 'KeyA' },
-    { x: 1, y: 0, code: 'KeyS' },
-    { x: 0, y: 1, code: 'KeyD' },
-    { x: -1, y: 0, code: 'KeyF' },
+    { index: 0, code: 'KeyA' },
+    { index: 1, code: 'KeyS' },
+    { index: 2, code: 'KeyD' },
+    { index: 3, code: 'KeyF' },
   ],
 };
+
+// Right-side swipe handling: swipe up to jump, swipe down to duck, tap for boost
+const rightSwipeTouches = new Map(); // touchId -> { startX, startY, lastX, lastY, used }
+const RIGHT_SWIPE_MIN_DISTANCE = 40;   // minimum vertical movement in px (canvas space) to count as swipe
+const RIGHT_TAP_MAX_MOVEMENT = 20;     // maximum movement to still count as a tap
+
 function getTouchPos(t, rect) {
   if (!rect) rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
   return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
 }
 function getTouchKey(x, y) {
-  if (x >= TOUCH.rightX)
-    return y < TOUCH.splitY ? 'ArrowUp' : 'ArrowDown';
-  const c = TOUCH.diamondCenter;
-  const r = TOUCH.diamondRadius;
+  // Only color buttons on the left now; right side is reserved for swipe/tap
+  if (x >= TOUCH.rightX) return null;
+  const br = TOUCH.buttonRadius;
+  const startX = TOUCH.colorRowStartX;
+  const rowY = TOUCH.colorRowY;
   let best = null, bestD = Infinity;
-  TOUCH.colorKeys.forEach(({ x: dx, y: dy, code }) => {
-    const px = c.x + dx * r, py = c.y + dy * r;
+  TOUCH.colorKeys.forEach(({ index, code }) => {
+    const px = startX + index * TOUCH.colorRowSpacing;
+    const py = rowY;
     const d = (x - px) ** 2 + (y - py) ** 2;
-    if (d < TOUCH.buttonRadius ** 2 && d < bestD) { bestD = d; best = code; }
+    if (d < br ** 2 && d < bestD) { bestD = d; best = code; }
   });
   return best;
 }
@@ -348,34 +358,75 @@ function onTouchStart(e) {
     return;
   }
   const rect = canvas.getBoundingClientRect();
-  if (e.changedTouches.length > 0 && speedMeter >= METER_MAX) {
-    const t = e.changedTouches[0];
-    const pos = getTouchPos(t, rect);
-    if (hitTestMeter(pos.x, pos.y)) {
-      trySpeedBoost();
-      return;
-    }
-  }
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     const pos = getTouchPos(t, rect);
+    // Right side: start tracking for swipe/tap actions (jump/duck/boost)
+    if (!startScreen && !gameOver && pos.x >= TOUCH.rightX) {
+      rightSwipeTouches.set(t.identifier, {
+        startX: pos.x,
+        startY: pos.y,
+        lastX: pos.x,
+        lastY: pos.y,
+        used: false,
+      });
+      continue;
+    }
+    // Left side: color buttons
     const code = getTouchKey(pos.x, pos.y);
     if (code) touchKeys.set(t.identifier, code);
   }
 }
 function onTouchEnd(e) {
   if (e.cancelable) e.preventDefault();
-  for (let i = 0; i < e.changedTouches.length; i++)
-    touchKeys.delete(e.changedTouches[i].identifier);
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const id = e.changedTouches[i].identifier;
+    const swipe = rightSwipeTouches.get(id);
+    // Treat a small-movement right-side touch as a boost tap when meter is full
+    if (swipe && !swipe.used && !startScreen && !gameOver && speedMeter >= METER_MAX) {
+      const dx = swipe.lastX - swipe.startX;
+      const dy = swipe.lastY - swipe.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= RIGHT_TAP_MAX_MOVEMENT) {
+        trySpeedBoost();
+      }
+    }
+    rightSwipeTouches.delete(id);
+    touchKeys.delete(id);
+  }
 }
 function onTouchCancel(e) {
-  for (let i = 0; i < e.changedTouches.length; i++)
-    touchKeys.delete(e.changedTouches[i].identifier);
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const id = e.changedTouches[i].identifier;
+    rightSwipeTouches.delete(id);
+    touchKeys.delete(id);
+  }
+}
+function onTouchMove(e) {
+  if (e.cancelable) e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const t = e.changedTouches[i];
+    const id = t.identifier;
+    const swipe = rightSwipeTouches.get(id);
+    if (!swipe) continue;
+    const pos = getTouchPos(t, rect);
+    swipe.lastX = pos.x;
+    swipe.lastY = pos.y;
+    if (!swipe.used) {
+      const dy = pos.y - swipe.startY;
+      if (Math.abs(dy) >= RIGHT_SWIPE_MIN_DISTANCE) {
+        const code = dy < 0 ? 'ArrowUp' : 'ArrowDown';
+        touchKeys.set(id, code);
+        swipe.used = true;
+      }
+    }
+  }
 }
 canvas.addEventListener('touchstart', onTouchStart, { passive: false });
 canvas.addEventListener('touchend', onTouchEnd, { passive: false });
 canvas.addEventListener('touchcancel', onTouchCancel, { passive: false });
-canvas.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchmove', onTouchMove, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
   if (tutorialMode && tutorialPaused) {
@@ -930,12 +981,13 @@ function loop(ts) {
 
   // Touch control overlay (left diamond = colors, right = up/down) — only on touch devices
   if (!startScreen && isTouchDevice) {
-    const c = TOUCH.diamondCenter;
-    const r = TOUCH.diamondRadius;
     const br = TOUCH.buttonRadius;
     const colors = ['#3d3', '#38f', '#555', '#ddd'];
-    TOUCH.colorKeys.forEach(({ x: dx, y: dy }, i) => {
-      const px = c.x + dx * r, py = c.y + dy * r;
+    const startX = TOUCH.colorRowStartX;
+    const rowY = TOUCH.colorRowY;
+    TOUCH.colorKeys.forEach(({ index }, i) => {
+      const px = startX + index * TOUCH.colorRowSpacing;
+      const py = rowY;
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.beginPath();
       ctx.arc(px, py, br, 0, Math.PI * 2);
@@ -950,19 +1002,6 @@ function loop(ts) {
       ctx.fill();
       ctx.globalAlpha = 1;
     });
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(TOUCH.rightX, 0, VIEW_W - TOUCH.rightX, TOUCH.splitY);
-    ctx.fillRect(TOUCH.rightX, TOUCH.splitY, VIEW_W - TOUCH.rightX, VIEW_H - TOUCH.splitY);
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(TOUCH.rightX, 0, VIEW_W - TOUCH.rightX, TOUCH.splitY);
-    ctx.strokeRect(TOUCH.rightX, TOUCH.splitY, VIEW_W - TOUCH.rightX, VIEW_H - TOUCH.splitY);
-    ctx.font = 'bold 14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.fillText('↑', TOUCH.rightX + (VIEW_W - TOUCH.rightX) / 2, TOUCH.splitY / 2 + 6);
-    ctx.fillText('↓', TOUCH.rightX + (VIEW_W - TOUCH.rightX) / 2, TOUCH.splitY + (VIEW_H - TOUCH.splitY) / 2 + 6);
-    ctx.textAlign = 'left';
   }
 
   if (tutorialMode && tutorialPaused) {
