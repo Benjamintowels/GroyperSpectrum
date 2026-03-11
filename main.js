@@ -162,10 +162,13 @@ const TOUCH = {
     { x:  150, y: 0, code: 'KeyF' },
   ],
   // Right side buttons: up (top), down (bottom), boost (bottom-left)
+  // Use a larger radius so these are roughly twice as big as the color buttons
+  rightButtonRadius: 80,
   rightButtons: {
-    up:    { x: VIEW_W - 80,  y: VIEW_H - 160 },
-    down:  { x: VIEW_W - 80,  y: VIEW_H - 80 },
-    boost: { x: VIEW_W - 160, y: VIEW_H - 80 },
+    // Positions chosen so circles just touch but don't overlap
+    up:    { x: VIEW_W - 100, y: VIEW_H - 220 },
+    down:  { x: VIEW_W - 100, y: VIEW_H - 60 },
+    boost: { x: VIEW_W - 280, y: VIEW_H - 60 },
   },
 };
 function getTouchPos(t, rect) {
@@ -176,7 +179,7 @@ function getTouchPos(t, rect) {
 function getTouchKey(x, y) {
   // Right-side buttons: up, down, boost
   if (TOUCH.rightButtons) {
-    const br = TOUCH.buttonRadius;
+    const br = TOUCH.rightButtonRadius || TOUCH.buttonRadius;
     const brSq = br * br;
     const { up, down, boost } = TOUCH.rightButtons;
     if (up) {
@@ -980,6 +983,7 @@ function loop(ts) {
     const rb = TOUCH.rightButtons;
     if (rb) {
       const full = speedMeter >= METER_MAX;
+      const rbr = TOUCH.rightButtonRadius || br;
       ctx.textAlign = 'center';
       ctx.font = 'bold 18px monospace';
 
@@ -987,14 +991,14 @@ function loop(ts) {
         if (!pos) return;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, br, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, rbr, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.beginPath();
         ctx.fillStyle = bgColor;
-        ctx.arc(pos.x, pos.y, br - 6, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, rbr - 10, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(label, pos.x, pos.y + 6);
