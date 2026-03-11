@@ -148,9 +148,9 @@ function isKeyDown(code) {
 window.addEventListener('keydown', e => { keysDown.add(e.code); e.preventDefault(); });
 window.addEventListener('keyup',   e => keysDown.delete(e.code));
 
-// Touch layout: right = swipe zone (jump/duck/boost), left = horizontal color row
+// Touch layout: right = 3 buttons (jump/duck/boost), left = horizontal color row
 const TOUCH = {
-  // X coordinate where "right side" begins (used for swipe / tap actions)
+  // X coordinate where "right side" begins (used for button placement)
   rightX: 520,
   // Color buttons (ASDF) row config — bottom-left horizontal line
   buttonRadius: 44,
@@ -164,11 +164,13 @@ const TOUCH = {
     { index: 3, code: 'KeyF' },
   ],
 };
-
-// Right-side swipe handling: swipe up to jump, swipe down to duck, tap for boost
-const rightSwipeTouches = new Map(); // touchId -> { startX, startY, lastX, lastY, used }
-const RIGHT_SWIPE_MIN_DISTANCE = 40;   // minimum vertical movement in px (canvas space) to count as swipe
-const RIGHT_TAP_MAX_MOVEMENT = 20;     // maximum movement to still count as a tap
+// Right-side button positions for mobile controls
+const RIGHT_BTN_SPACING = 120; // vertical spacing between jump/duck/boost centers
+const RIGHT_BTN_CENTER_X = VIEW_W - 80;
+const RIGHT_UP_CENTER_Y = VIEW_H / 2 - RIGHT_BTN_SPACING * 0.5;
+const RIGHT_DOWN_CENTER_Y = VIEW_H / 2 + RIGHT_BTN_SPACING * 0.5;
+const RIGHT_BOOST_CENTER_X = RIGHT_BTN_CENTER_X - RIGHT_BTN_SPACING * 0.7;
+const RIGHT_BOOST_CENTER_Y = RIGHT_DOWN_CENTER_Y;
 
 function getTouchPos(t, rect) {
   if (!rect) rect = canvas.getBoundingClientRect();
@@ -176,9 +178,17 @@ function getTouchPos(t, rect) {
   return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
 }
 function getTouchKey(x, y) {
-  // Only color buttons on the left now; right side is reserved for swipe/tap
-  if (x >= TOUCH.rightX) return null;
   const br = TOUCH.buttonRadius;
+  // Right-side jump/duck buttons
+  if (x >= TOUCH.rightX) {
+    const upD = (x - RIGHT_UP_CENTER_X) ** 2 + (y - RIGHT_UP_CENTER_Y) ** 2;
+    if (upD < br ** 2) return 'ArrowUp';
+    const downD = (x - RIGHT_DOWN_CENTER_X) ** 2 + (y - RIGHT_DOWN_CENTER_Y) ** 2;
+    if (downD < br ** 2) return 'ArrowDown';
+    // Boost button is handled directly (not via key mapping) so return null here
+    return null;
+  }
+  // Left-side color buttons
   const startX = TOUCH.colorRowStartX;
   const rowY = TOUCH.colorRowY;
   let best = null, bestD = Infinity;
@@ -361,18 +371,16 @@ function onTouchStart(e) {
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     const pos = getTouchPos(t, rect);
-    // Right side: start tracking for swipe/tap actions (jump/duck/boost)
+    // Right side: check boost button tap first, then jump/duck buttons
     if (!startScreen && !gameOver && pos.x >= TOUCH.rightX) {
-      rightSwipeTouches.set(t.identifier, {
-        startX: pos.x,
-        startY: pos.y,
-        lastX: pos.x,
-        lastY: pos.y,
-        used: false,
-      });
-      continue;
+      const br = TOUCH.buttonRadius;
+      const boostD = (pos.x - RIGHT_BOOST_CENTER_X) ** 2 + (pos.y - RIGHT_BOOST_CENTER_Y) ** 2;
+      if (boostD < br ** 2 && speedMeter >= METER_MAX) {
+        trySpeedBoost();
+        continue;
+      }
     }
-    // Left side: color buttons
+    // All buttons via key mapping (colors + jump/duck)
     const code = getTouchKey(pos.x, pos.y);
     if (code) touchKeys.set(t.identifier, code);
   }
@@ -380,53 +388,17 @@ function onTouchStart(e) {
 function onTouchEnd(e) {
   if (e.cancelable) e.preventDefault();
   for (let i = 0; i < e.changedTouches.length; i++) {
-    const id = e.changedTouches[i].identifier;
-    const swipe = rightSwipeTouches.get(id);
-    // Treat a small-movement right-side touch as a boost tap when meter is full
-    if (swipe && !swipe.used && !startScreen && !gameOver && speedMeter >= METER_MAX) {
-      const dx = swipe.lastX - swipe.startX;
-      const dy = swipe.lastY - swipe.startY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist <= RIGHT_TAP_MAX_MOVEMENT) {
-        trySpeedBoost();
-      }
-    }
-    rightSwipeTouches.delete(id);
-    touchKeys.delete(id);
+    touchKeys.delete(e.changedTouches[i].identifier);
   }
 }
 function onTouchCancel(e) {
   for (let i = 0; i < e.changedTouches.length; i++) {
-    const id = e.changedTouches[i].identifier;
-    rightSwipeTouches.delete(id);
-    touchKeys.delete(id);
-  }
-}
-function onTouchMove(e) {
-  if (e.cancelable) e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  for (let i = 0; i < e.changedTouches.length; i++) {
-    const t = e.changedTouches[i];
-    const id = t.identifier;
-    const swipe = rightSwipeTouches.get(id);
-    if (!swipe) continue;
-    const pos = getTouchPos(t, rect);
-    swipe.lastX = pos.x;
-    swipe.lastY = pos.y;
-    if (!swipe.used) {
-      const dy = pos.y - swipe.startY;
-      if (Math.abs(dy) >= RIGHT_SWIPE_MIN_DISTANCE) {
-        const code = dy < 0 ? 'ArrowUp' : 'ArrowDown';
-        touchKeys.set(id, code);
-        swipe.used = true;
-      }
-    }
+    touchKeys.delete(e.changedTouches[i].identifier);
   }
 }
 canvas.addEventListener('touchstart', onTouchStart, { passive: false });
 canvas.addEventListener('touchend', onTouchEnd, { passive: false });
 canvas.addEventListener('touchcancel', onTouchCancel, { passive: false });
-canvas.addEventListener('touchmove', onTouchMove, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
   if (tutorialMode && tutorialPaused) {
@@ -979,7 +951,7 @@ function loop(ts) {
     ctx.fillText(`SPEED ${obsMgr.difficulty + 1}`, r.x, r.y + r.h + 16);
   }
 
-  // Touch control overlay (left diamond = colors, right = up/down) — only on touch devices
+  // Touch control overlay (left = colors row, right = up/down/boost buttons) — only on touch devices
   if (!startScreen && isTouchDevice) {
     const br = TOUCH.buttonRadius;
     const colors = ['#3d3', '#38f', '#555', '#ddd'];
@@ -1002,6 +974,50 @@ function loop(ts) {
       ctx.fill();
       ctx.globalAlpha = 1;
     });
+
+    // Right-side buttons: Up / Down stacked, Boost below-left (black, gold when ready)
+    const full = speedMeter >= METER_MAX;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 18px monospace';
+
+    // Jump (Up) button
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.arc(RIGHT_UP_CENTER_X, RIGHT_UP_CENTER_Y, br, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('↑', RIGHT_UP_CENTER_X, RIGHT_UP_CENTER_Y + 6);
+
+    // Duck (Down) button
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.arc(RIGHT_DOWN_CENTER_X, RIGHT_DOWN_CENTER_Y, br, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('↓', RIGHT_DOWN_CENTER_X, RIGHT_DOWN_CENTER_Y + 6);
+
+    // Boost button — black by default, gold when ready
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.arc(RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y, br, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = full ? '#fc0' : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.fillStyle = full ? '#fa0' : '#000';
+    ctx.arc(RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y, br - 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = full ? '#000' : '#fff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('BOOST', RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y + 4);
+    ctx.textAlign = 'left';
   }
 
   if (tutorialMode && tutorialPaused) {
