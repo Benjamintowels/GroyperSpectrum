@@ -148,55 +148,57 @@ function isKeyDown(code) {
 window.addEventListener('keydown', e => { keysDown.add(e.code); e.preventDefault(); });
 window.addEventListener('keyup',   e => keysDown.delete(e.code));
 
-// Touch layout: right = 3 buttons (jump/duck/boost), left = horizontal color row
+// Touch layout: right = three buttons (up, down, boost), left = horizontal row of 4 color buttons
 const TOUCH = {
-  // X coordinate where "right side" begins (used for button placement)
-  rightX: 520,
-  // Color buttons (ASDF) row config — bottom-left horizontal line
+  // Color buttons: bottom-left, horizontal row
+  diamondCenter: { x: 160, y: VIEW_H - 60 },
+  diamondRadius: 50,
   buttonRadius: 44,
-  colorRowStartX: 80,
-  colorRowY: VIEW_H - 40,
-  colorRowSpacing: 108, // horizontal distance between button centers
   colorKeys: [
-    { index: 0, code: 'KeyA' },
-    { index: 1, code: 'KeyS' },
-    { index: 2, code: 'KeyD' },
-    { index: 3, code: 'KeyF' },
+    { x: -1.5, y: 0, code: 'KeyA' },
+    { x: -0.5, y: 0, code: 'KeyS' },
+    { x: 0.5,  y: 0, code: 'KeyD' },
+    { x: 1.5,  y: 0, code: 'KeyF' },
   ],
+  // Right side buttons: up (top), down (bottom), boost (bottom-left)
+  rightButtons: {
+    up:    { x: VIEW_W - 80,  y: VIEW_H - 160 },
+    down:  { x: VIEW_W - 80,  y: VIEW_H - 80 },
+    boost: { x: VIEW_W - 160, y: VIEW_H - 80 },
+  },
 };
-// Right-side button positions for mobile controls
-const RIGHT_BTN_SPACING = 120; // vertical spacing between jump/duck/boost centers
-const RIGHT_BTN_CENTER_X = VIEW_W - 80;
-const RIGHT_UP_CENTER_Y = VIEW_H / 2 - RIGHT_BTN_SPACING * 0.5;
-const RIGHT_DOWN_CENTER_Y = VIEW_H / 2 + RIGHT_BTN_SPACING * 0.5;
-const RIGHT_BOOST_CENTER_X = RIGHT_BTN_CENTER_X - RIGHT_BTN_SPACING * 0.7;
-const RIGHT_BOOST_CENTER_Y = RIGHT_DOWN_CENTER_Y;
-
 function getTouchPos(t, rect) {
   if (!rect) rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
   return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
 }
 function getTouchKey(x, y) {
-  const br = TOUCH.buttonRadius;
-  // Right-side jump/duck buttons
-  if (x >= TOUCH.rightX) {
-    const upD = (x - RIGHT_UP_CENTER_X) ** 2 + (y - RIGHT_UP_CENTER_Y) ** 2;
-    if (upD < br ** 2) return 'ArrowUp';
-    const downD = (x - RIGHT_DOWN_CENTER_X) ** 2 + (y - RIGHT_DOWN_CENTER_Y) ** 2;
-    if (downD < br ** 2) return 'ArrowDown';
-    // Boost button is handled directly (not via key mapping) so return null here
-    return null;
+  // Right-side buttons: up, down, boost
+  if (TOUCH.rightButtons) {
+    const br = TOUCH.buttonRadius;
+    const brSq = br * br;
+    const { up, down, boost } = TOUCH.rightButtons;
+    if (up) {
+      const du = (x - up.x) * (x - up.x) + (y - up.y) * (y - up.y);
+      if (du <= brSq) return 'ArrowUp';
+    }
+    if (down) {
+      const dd = (x - down.x) * (x - down.x) + (y - down.y) * (y - down.y);
+      if (dd <= brSq) return 'ArrowDown';
+    }
+    if (boost) {
+      const db = (x - boost.x) * (x - boost.x) + (y - boost.y) * (y - boost.y);
+      if (db <= brSq) return 'ArrowRight';
+    }
   }
-  // Left-side color buttons
-  const startX = TOUCH.colorRowStartX;
-  const rowY = TOUCH.colorRowY;
+  // Left-side color buttons (horizontal row)
+  const c = TOUCH.diamondCenter;
+  const r = TOUCH.diamondRadius;
   let best = null, bestD = Infinity;
-  TOUCH.colorKeys.forEach(({ index, code }) => {
-    const px = startX + index * TOUCH.colorRowSpacing;
-    const py = rowY;
+  TOUCH.colorKeys.forEach(({ x: dx, y: dy, code }) => {
+    const px = c.x + dx * r, py = c.y + dy * r;
     const d = (x - px) ** 2 + (y - py) ** 2;
-    if (d < br ** 2 && d < bestD) { bestD = d; best = code; }
+    if (d < TOUCH.buttonRadius ** 2 && d < bestD) { bestD = d; best = code; }
   });
   return best;
 }
@@ -368,37 +370,34 @@ function onTouchStart(e) {
     return;
   }
   const rect = canvas.getBoundingClientRect();
+  if (e.changedTouches.length > 0 && speedMeter >= METER_MAX) {
+    const t = e.changedTouches[0];
+    const pos = getTouchPos(t, rect);
+    if (hitTestMeter(pos.x, pos.y)) {
+      trySpeedBoost();
+      return;
+    }
+  }
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     const pos = getTouchPos(t, rect);
-    // Right side: check boost button tap first, then jump/duck buttons
-    if (!startScreen && !gameOver && pos.x >= TOUCH.rightX) {
-      const br = TOUCH.buttonRadius;
-      const boostD = (pos.x - RIGHT_BOOST_CENTER_X) ** 2 + (pos.y - RIGHT_BOOST_CENTER_Y) ** 2;
-      if (boostD < br ** 2 && speedMeter >= METER_MAX) {
-        trySpeedBoost();
-        continue;
-      }
-    }
-    // All buttons via key mapping (colors + jump/duck)
     const code = getTouchKey(pos.x, pos.y);
     if (code) touchKeys.set(t.identifier, code);
   }
 }
 function onTouchEnd(e) {
   if (e.cancelable) e.preventDefault();
-  for (let i = 0; i < e.changedTouches.length; i++) {
+  for (let i = 0; i < e.changedTouches.length; i++)
     touchKeys.delete(e.changedTouches[i].identifier);
-  }
 }
 function onTouchCancel(e) {
-  for (let i = 0; i < e.changedTouches.length; i++) {
+  for (let i = 0; i < e.changedTouches.length; i++)
     touchKeys.delete(e.changedTouches[i].identifier);
-  }
 }
 canvas.addEventListener('touchstart', onTouchStart, { passive: false });
 canvas.addEventListener('touchend', onTouchEnd, { passive: false });
 canvas.addEventListener('touchcancel', onTouchCancel, { passive: false });
+canvas.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
   if (tutorialMode && tutorialPaused) {
@@ -951,16 +950,14 @@ function loop(ts) {
     ctx.fillText(`SPEED ${obsMgr.difficulty + 1}`, r.x, r.y + r.h + 16);
   }
 
-  // Touch control overlay (left = colors row, right = up/down/boost buttons)
-  // Draw during active play on all devices so layout is always visible.
-  if (!startScreen && !gameOver) {
+  // Touch control overlay (left diamond = colors, right = up/down) — only on touch devices
+  if (!startScreen && isTouchDevice) {
+    const c = TOUCH.diamondCenter;
+    const r = TOUCH.diamondRadius;
     const br = TOUCH.buttonRadius;
     const colors = ['#3d3', '#38f', '#555', '#ddd'];
-    const startX = TOUCH.colorRowStartX;
-    const rowY = TOUCH.colorRowY;
-    TOUCH.colorKeys.forEach(({ index }, i) => {
-      const px = startX + index * TOUCH.colorRowSpacing;
-      const py = rowY;
+    TOUCH.colorKeys.forEach(({ x: dx, y: dy }, i) => {
+      const px = c.x + dx * r, py = c.y + dy * r;
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.beginPath();
       ctx.arc(px, py, br, 0, Math.PI * 2);
@@ -976,49 +973,40 @@ function loop(ts) {
       ctx.globalAlpha = 1;
     });
 
-    // Right-side buttons: Up / Down stacked, Boost below-left (black, gold when ready)
-    const full = speedMeter >= METER_MAX;
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 18px monospace';
+    // Right-side buttons: up, down, boost
+    const rb = TOUCH.rightButtons;
+    if (rb) {
+      const full = speedMeter >= METER_MAX;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 18px monospace';
 
-    // Jump (Up) button
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath();
-    ctx.arc(RIGHT_UP_CENTER_X, RIGHT_UP_CENTER_Y, br, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.fillText('↑', RIGHT_UP_CENTER_X, RIGHT_UP_CENTER_Y + 6);
+      function drawCircleButton(pos, bgColor, label) {
+        if (!pos) return;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, br, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.fillStyle = bgColor;
+        ctx.arc(pos.x, pos.y, br - 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, pos.x, pos.y + 6);
+      }
 
-    // Duck (Down) button
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath();
-    ctx.arc(RIGHT_DOWN_CENTER_X, RIGHT_DOWN_CENTER_Y, br, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.fillText('↓', RIGHT_DOWN_CENTER_X, RIGHT_DOWN_CENTER_Y + 6);
+      // Up and down buttons (stacked)
+      drawCircleButton(rb.up, '#3a8', '↑');
+      drawCircleButton(rb.down, '#38f', '↓');
 
-    // Boost button — black by default, gold when ready
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath();
-    ctx.arc(RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y, br, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = full ? '#fc0' : 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.fillStyle = full ? '#fa0' : '#000';
-    ctx.arc(RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y, br - 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = full ? '#000' : '#fff';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText('BOOST', RIGHT_BOOST_CENTER_X, RIGHT_BOOST_CENTER_Y + 4);
-    ctx.textAlign = 'left';
+      // Boost button: black when not ready, gold when full
+      const boostColor = full ? '#d4af37' : '#000';
+      drawCircleButton(rb.boost, boostColor, '↗');
+
+      ctx.textAlign = 'left';
+    }
   }
 
   if (tutorialMode && tutorialPaused) {
