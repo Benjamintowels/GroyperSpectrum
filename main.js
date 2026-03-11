@@ -151,14 +151,15 @@ window.addEventListener('keyup',   e => keysDown.delete(e.code));
 // Touch layout: right = three buttons (up, down, boost), left = horizontal row of 4 color buttons
 const TOUCH = {
   // Color buttons: bottom-left, horizontal row
-  diamondCenter: { x: 160, y: VIEW_H - 60 },
-  diamondRadius: 50,
-  buttonRadius: 44,
+  diamondCenter: { x: 220, y: VIEW_H - 60 },
+  // Use radius 1 so dx values are in pixels; spread so buttons don't overlap
+  diamondRadius: 1,
+  buttonRadius: 40,
   colorKeys: [
-    { x: -1.5, y: 0, code: 'KeyA' },
-    { x: -0.5, y: 0, code: 'KeyS' },
-    { x: 0.5,  y: 0, code: 'KeyD' },
-    { x: 1.5,  y: 0, code: 'KeyF' },
+    { x: -150, y: 0, code: 'KeyA' },
+    { x:  -50, y: 0, code: 'KeyS' },
+    { x:   50, y: 0, code: 'KeyD' },
+    { x:  150, y: 0, code: 'KeyF' },
   ],
   // Right side buttons: up (top), down (bottom), boost (bottom-left)
   rightButtons: {
@@ -370,18 +371,16 @@ function onTouchStart(e) {
     return;
   }
   const rect = canvas.getBoundingClientRect();
-  if (e.changedTouches.length > 0 && speedMeter >= METER_MAX) {
-    const t = e.changedTouches[0];
-    const pos = getTouchPos(t, rect);
-    if (hitTestMeter(pos.x, pos.y)) {
-      trySpeedBoost();
-      return;
-    }
-  }
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
     const pos = getTouchPos(t, rect);
     const code = getTouchKey(pos.x, pos.y);
+    // Boost via dedicated button or tapping the meter
+    if (!gameOver && !startScreen && speedMeter >= METER_MAX) {
+      if (code === 'ArrowRight' || hitTestMeter(pos.x, pos.y)) {
+        if (trySpeedBoost()) continue;
+      }
+    }
     if (code) touchKeys.set(t.identifier, code);
   }
 }
@@ -881,6 +880,9 @@ function loop(ts) {
   }
 
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+  // Raise the game world slightly so UI buttons don't block the character
+  ctx.save();
+  ctx.translate(0, -10);
   bg.draw(ctx);
   obsMgr.draw(ctx);
   if (performance.now() < hitInvincibleUntilTime) {
@@ -891,6 +893,7 @@ function loop(ts) {
   } else {
     player.draw(ctx);
   }
+  ctx.restore();
 
   // Hearts (top of HUD) — only during active play
   if (!startScreen && !gameOver) {
