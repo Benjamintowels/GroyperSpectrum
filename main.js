@@ -951,8 +951,9 @@ function loop(ts) {
     ctx.fillText(`SPEED ${obsMgr.difficulty + 1}`, r.x, r.y + r.h + 16);
   }
 
-  // Touch control overlay (left = colors row, right = up/down/boost buttons) — only on touch devices
-  if (!startScreen && isTouchDevice) {
+  // Touch control overlay (left = colors row, right = up/down/boost buttons)
+  // Draw during active play on all devices so layout is always visible.
+  if (!startScreen && !gameOver) {
     const br = TOUCH.buttonRadius;
     const colors = ['#3d3', '#38f', '#555', '#ddd'];
     const startX = TOUCH.colorRowStartX;
