@@ -25,6 +25,10 @@ const VIEW_H  = canvas.height;
 const titleImage = new Image();
 titleImage.src = 'Assets/TitleImage.png';
 
+// Main menu character art on the right side
+const groyperMainImage = new Image();
+groyperMainImage.src = 'Assets/GroyperMain.png';
+
 // Sound effects
 const SFX = {
   jump:         new Audio('Assets/SoundFX/jump.wav'),
@@ -798,6 +802,60 @@ function checkCollisions() {
       continue;
     }
 
+    // Barrel logic — allow landing on top (correct color) as a short rail
+    if (obs.type === 'barrel') {
+      const hOverlap = player.right > obs.left + 5 && player.left < obs.right - 5;
+
+      // If already treating this barrel as a rail, check if we've reached the end
+      if (player.activeRail === obs) {
+        if (player.right > obs.right) {
+          player.leaveRail();
+          if (typeof stopGrindSound === 'function') stopGrindSound();
+        }
+        continue;
+      }
+
+      // No vertical overlap: still allow "clean jump over" to count for meter
+      if (!obs.overlaps(player)) {
+        if (hOverlap && player.state === 'jump' && player.color === obs.color) {
+          obs.clearedForMeter = true;
+        }
+        continue;
+      }
+
+      // Landing on top of the barrel with matching color → treat like landing on a rail
+      const colorOk = player.color === obs.color;
+      const landingOnTop =
+        player.state === 'jump' &&
+        colorOk &&
+        player.bottom >= obs.top &&
+        player.bottom <= obs.top + 16;
+
+      if (landingOnTop) {
+        player.landOnRail(obs);
+        if (typeof startGrindSound === 'function') startGrindSound();
+        obs.clearedForMeter = true;
+        continue;
+      }
+
+      // All other barrel collisions fall back to standard survive/hit logic
+      if (!obs.playerSurvives(player)) {
+        if (performance.now() >= hitInvincibleUntilTime) {
+          if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
+          hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+          hearts--;
+          if (hearts > 0 && typeof playCrashSound === 'function') playCrashSound();
+          if (hearts <= 0) {
+            diedFromDamage = true;
+            triggerGameOver();
+          }
+        }
+      } else {
+        obs.clearedForMeter = true;
+      }
+      continue;
+    }
+
     // All other obstacles
     const hOverlap = player.right > obs.left + 5 && player.left < obs.right - 5;
     if (!obs.overlaps(player)) {
@@ -986,6 +1044,20 @@ function loop(ts) {
       ctx.font = 'bold 1.8rem monospace';
       ctx.textAlign = 'center';
       ctx.fillText('TOAD RUNNER', VIEW_W / 2, 70);
+    }
+
+    // Groyper art on the right side behind the mode buttons
+    if (groyperMainImage.complete && groyperMainImage.naturalWidth) {
+      const gw = groyperMainImage.naturalWidth;
+      const gh = groyperMainImage.naturalHeight;
+      const maxH = 220;
+      const scale = maxH / gh;
+      const dw = gw * scale;
+      const dh = maxH;
+      const paddingRight = 40;
+      const x = VIEW_W - dw - paddingRight;
+      const y = 120;
+      ctx.drawImage(groyperMainImage, x, y, dw, dh);
     }
 
     const buttons = getModeButtons();
