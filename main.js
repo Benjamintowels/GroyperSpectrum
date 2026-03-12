@@ -254,18 +254,15 @@ function showDailyRunError(msg) {
   dailyRunErrorAt = Date.now();
 }
 
-async function startDailyRun() {
+function startDailyRun() {
   dailyRunErrorMsg = null;
   try {
-    const res = await fetch(`${API_URL}/daily-seed`);
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    const data = await res.json();
-    if (!data.seed || !data.date) throw new Error('Invalid daily seed response');
-    const pattern = obsMgr.generateDailyPattern(data.seed);
+    const dateStr = getServerDateString();
+    const pattern = obsMgr.generateDailyPattern(dateStr);
     startRun('race');
     obsMgr.setDailyPattern(pattern);
     isDailyRun = true;
-    dailyDate = data.date;
+    dailyDate = dateStr;
     const btn = document.getElementById('dailyRunBtn');
     if (btn) btn.style.display = 'none';
   } catch (e) {
