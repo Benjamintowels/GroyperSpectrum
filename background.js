@@ -1,5 +1,39 @@
+// Preload background building sprite sets
+const CITY_BUILDING_SOURCES = [
+  'Assets/BG/CityBuilding1.png',
+  'Assets/BG/CityBuilding2.png',
+  'Assets/BG/CityBuilding3.png',
+  'Assets/BG/CityBuilding4.png',
+  'Assets/BG/CityBuilding5.png',
+];
+
+const FRONT_BUILDING_SOURCES = [
+  'Assets/BG/FrontBuilding1.png',
+  'Assets/BG/FrontBuilding2.png',
+  'Assets/BG/FrontBuilding3.png',
+  'Assets/BG/FrontBuilding4.png',
+  'Assets/BG/FrontBuilding5.png',
+  'Assets/BG/FrontBuilding6.png',
+];
+
+const CITY_BUILDINGS = CITY_BUILDING_SOURCES.map(src => {
+  const img = new Image();
+  img.src = src;
+  return img;
+});
+
+const FRONT_BUILDINGS = FRONT_BUILDING_SOURCES.map(src => {
+  const img = new Image();
+  img.src = src;
+  return img;
+});
+
 class Background {
   constructor() {
+    // Logical scroll positions (unbounded) so we can derive
+    // deterministic "random" building layouts per tile.
+    this.bgScroll = 0;
+    this.mgScroll = 0;
     this.bgX = 0;
     this.mgX = 0;
     this.fgX = 0;
@@ -12,8 +46,10 @@ class Background {
 
   update(speed) {
     const tileW = 800; // width of one background tile
-    this.bgX = (this.bgX - speed * 0.2) % tileW;
-    this.mgX = (this.mgX - speed * 0.55) % tileW;
+    this.bgScroll -= speed * 0.2;
+    this.mgScroll -= speed * 0.55;
+    this.bgX = this.bgScroll % tileW;
+    this.mgX = this.mgScroll % tileW;
     this.fgX = (this.fgX - speed) % tileW;
   }
 
@@ -65,15 +101,22 @@ class Background {
     ctx.restore();
 
     const tileW = 800;
+    const tilesNeeded = Math.ceil(w / tileW) + 2;
 
+    // Far background buildings (city skyline)
     ctx.fillStyle = '#181830';
-    for (let r = 0; r < Math.ceil(w / tileW) + 1; r++) {
-      this._city(ctx, this.bgX + r * tileW);
+    for (let r = 0; r < tilesNeeded; r++) {
+      const ox = this.bgX + r * tileW;
+      const tileIndex = Math.floor(this.bgScroll / tileW) + r;
+      this._city(ctx, ox, tileIndex);
     }
 
+    // Midground / front buildings
     ctx.fillStyle = '#101020';
-    for (let r = 0; r < Math.ceil(w / tileW) + 1; r++) {
-      this._mid(ctx, this.mgX + r * tileW);
+    for (let r = 0; r < tilesNeeded; r++) {
+      const ox = this.mgX + r * tileW;
+      const tileIndex = Math.floor(this.mgScroll / tileW) + r;
+      this._mid(ctx, ox, tileIndex);
     }
 
     // Ground gradually lightens with the sunrise
@@ -121,21 +164,94 @@ class Background {
     return { r, g, b };
   }
 
-  _city(ctx, ox) {
-    const b = [
-      [0,90,55],[65,55,48],[120,100,65],[195,65,42],
-      [245,105,72],[325,48,52],[385,80,60],[450,60,48],
-      [508,88,70],[588,50,55],[645,75,52],[705,95,75]
-    ];
-    for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+  // Deterministic pseudo-random generator based on tile index
+  _seededRng(seed) {
+    let x = (seed | 0) + 0x6d2b79f5;
+    return function next() {
+      x |= 0;
+      x = (x + 0x6d2b79f5) | 0;
+      let t = Math.imul(x ^ (x >>> 15), 1 | x);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
-  _mid(ctx, ox) {
-    const b = [
-      [10,42,28],[75,56,24],[145,38,36],[215,50,26],
-      [290,44,32],[365,40,28],[430,52,24],[500,46,36],
-      [575,38,30],[640,54,26],[710,42,33],[775,48,28]
-    ];
-    for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+  _city(ctx, ox, tileIndex) {
+    const imgs = CITY_BUILDINGS.filter(img => img.complete && img.naturalWidth > 0);
+    if (!imgs.length) {
+      // Fallback to simple rectangles if sprites are not ready yet.
+      const b = [
+        [0, 90, 55],
+        [65, 55, 48],
+        [120, 100, 65],
+        [195, 65, 42],
+        [245, 105, 72],
+        [325, 48, 52],
+        [385, 80, 60],
+        [450, 60, 48],
+        [508, 88, 70],
+        [588, 50, 55],
+        [645, 75, 52],
+        [705, 95, 75],
+      ];
+      for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+      return;
+    }
+
+    const tileW = 800;
+    const rng = this._seededRng(tileIndex);
+    let xCursor = -40 + rng() * 60;
+    const baseY = 310;
+
+    while (xCursor < tileW + 60) {
+      const img = imgs[Math.floor(rng() * imgs.length)];
+      const scale = 0.9 + rng() * 0.3; // small variation in height/width
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      const drawX = ox + xCursor;
+      const drawY = baseY - h;
+      ctx.drawImage(img, drawX, drawY, w, h);
+      const gap = 10 + rng() * 40;
+      xCursor += w + gap;
+    }
+  }
+
+  _mid(ctx, ox, tileIndex) {
+    const imgs = FRONT_BUILDINGS.filter(img => img.complete && img.naturalWidth > 0);
+    if (!imgs.length) {
+      const b = [
+        [10, 42, 28],
+        [75, 56, 24],
+        [145, 38, 36],
+        [215, 50, 26],
+        [290, 44, 32],
+        [365, 40, 28],
+        [430, 52, 24],
+        [500, 46, 36],
+        [575, 38, 30],
+        [640, 54, 26],
+        [710, 42, 33],
+        [775, 48, 28],
+      ];
+      for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+      return;
+    }
+
+    const tileW = 800;
+    const rng = this._seededRng(tileIndex * 101);
+    let xCursor = -60 + rng() * 80;
+    const baseY = 310;
+
+    while (xCursor < tileW + 80) {
+      const img = imgs[Math.floor(rng() * imgs.length)];
+      const scale = 0.95 + rng() * 0.35;
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      const drawX = ox + xCursor;
+      const drawY = baseY - h;
+      ctx.drawImage(img, drawX, drawY, w, h);
+      const gap = 20 + rng() * 60;
+      xCursor += w + gap;
+    }
   }
 }
