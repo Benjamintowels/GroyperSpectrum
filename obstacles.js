@@ -8,6 +8,19 @@ const COLORS_MAP = {
   white: '#ddd',
 };
 
+// Barrel sprites per color (fallbacks to rects if not yet loaded)
+const BARREL_SPRITES = {
+  green: new Image(),
+  blue:  new Image(),
+  black: new Image(),
+  white: new Image(),
+};
+
+BARREL_SPRITES.green.src = 'Assets/Obstacles/BarrelGreen.png';
+BARREL_SPRITES.blue .src = 'Assets/Obstacles/BarrelBlue.png';
+BARREL_SPRITES.black.src = 'Assets/Obstacles/BarrelBlack.png';
+BARREL_SPRITES.white.src = 'Assets/Obstacles/BarrelWhite.png';
+
 const RAIL_HEIGHT       = 8;
 const RAIL_Y            = GROUND_Y - P_H;
 const SCROLL_SPEED_MULT = 7; // base scroll speed multiplier
@@ -98,19 +111,25 @@ class Obstacle {
     }
 
     if (this.type === 'barrel') {
-      ctx.fillStyle = c;
-      ctx.fillRect(this.x, this.y, this.w, this.h);
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.lineWidth = 2;
-      [0.33, 0.66].forEach(f => {
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y + this.h * f);
-        ctx.lineTo(this.x + this.w, this.y + this.h * f);
-        ctx.stroke();
-      });
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(this.x, this.y, this.w, this.h);
+      const img = BARREL_SPRITES[this.color];
+      if (img && img.complete && img.naturalWidth) {
+        ctx.drawImage(img, this.x, this.y, this.w, this.h);
+      } else {
+        // Fallback: original rect-style barrel if image not ready
+        ctx.fillStyle = c;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 2;
+        [0.33, 0.66].forEach(f => {
+          ctx.beginPath();
+          ctx.moveTo(this.x, this.y + this.h * f);
+          ctx.lineTo(this.x + this.w, this.y + this.h * f);
+          ctx.stroke();
+        });
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
+      }
     }
 
     if (this.type === 'ceiling') {

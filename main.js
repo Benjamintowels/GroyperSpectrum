@@ -691,10 +691,26 @@ function checkCollisions() {
     } else if (obs.type === 'gate' || obs.type === 'barrel') obs.clearedForMeter = true;
   }
 
-  // Color swap on rail check is handled inside player.handleInput
+  // Color swap on rail check is handled inside player.handleInput.
+  // When that happens, player.state is set to 'dead' here — treat it
+  // exactly like a normal obstacle hit (lose 1 heart, slow down one notch),
+  // not an instant kill that ignores remaining hearts.
   if (player.state === 'dead') {
-    diedFromDamage = true;
-    triggerGameOver();
+    if (performance.now() >= hitInvincibleUntilTime) {
+      if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
+      hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
+      hearts--;
+      if (hearts <= 0) {
+        diedFromDamage = true;
+        triggerGameOver();
+      }
+    }
+    // After taking the hit, drop back to ground and resume play so
+    // we don't repeatedly apply this damage every frame.
+    player.activeRail = null;
+    player.groundY    = GROUND_Y;
+    player.y          = GROUND_Y;
+    player.state      = 'run';
   }
 }
 
