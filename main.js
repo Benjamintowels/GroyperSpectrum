@@ -1035,10 +1035,11 @@ function loop(ts) {
 
     if (titleImage.complete && titleImage.naturalWidth) {
       const tw = titleImage.naturalWidth, th = titleImage.naturalHeight;
-      const maxH = 80;
+      const baseMaxH = 80;
+      const maxH = baseMaxH * 4;
       const scale = maxH / th;
       const dw = tw * scale, dh = maxH;
-      ctx.drawImage(titleImage, VIEW_W / 2 - dw / 2, 20, dw, dh);
+      ctx.drawImage(titleImage, VIEW_W / 2 - dw / 2, -83, dw, dh);
     } else {
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 1.8rem monospace';
