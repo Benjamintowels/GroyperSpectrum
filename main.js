@@ -1272,19 +1272,20 @@ function loop(ts) {
     const colors = ['#3d3', '#38f', '#555', '#ddd'];
     TOUCH.colorKeys.forEach(({ x: dx, y: dy }, i) => {
       const px = c.x + dx * r, py = c.y + dy * r;
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(px, py, br, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = colors[i];
-      ctx.globalAlpha = 0.6;
       ctx.beginPath();
       ctx.arc(px, py, br - 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.restore();
     });
 
     // Right-side buttons: up, down, boost
@@ -1297,11 +1298,13 @@ function loop(ts) {
 
       function drawCircleButton(pos, bgColor, label) {
         if (!pos) return;
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.save();
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = '#000000';
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, rbr, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.beginPath();
@@ -1310,6 +1313,7 @@ function loop(ts) {
         ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(label, pos.x, pos.y + 6);
+        ctx.restore();
       }
 
       // Up and down buttons (stacked)
