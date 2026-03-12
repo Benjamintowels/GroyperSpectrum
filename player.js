@@ -198,6 +198,7 @@ class Player {
   }
 
   _startJump() {
+    if (typeof playJumpSound === 'function') playJumpSound();
     this.state      = 'jump';
     this.cancelling = false;
     this.peaking    = false;
@@ -206,6 +207,7 @@ class Player {
 
     // If jumping off rail, leave it
     if (this.activeRail) {
+      if (typeof stopGrindSound === 'function') stopGrindSound();
       this.activeRail = null;
       this.groundY    = GROUND_Y;
     }
@@ -217,6 +219,7 @@ class Player {
         this.state   = 'run';
         this.peaking = false;
         this.groundY = GROUND_Y;
+        if (typeof playLandSound === 'function') playLandSound();
       });
     });
   }

@@ -25,6 +25,81 @@ const VIEW_H  = canvas.height;
 const titleImage = new Image();
 titleImage.src = 'Assets/TitleImage.png';
 
+// Sound effects
+const SFX = {
+  jump:         new Audio('Assets/SoundFX/jump.wav'),
+  land:         new Audio('Assets/SoundFX/land.wav'),
+  grind:        new Audio('Assets/SoundFX/rail.wav'),
+  crash:        new Audio('Assets/SoundFX/crash.wav'),
+  selectMenu:   new Audio('Assets/SoundFX/selectmenu.wav'),
+  boost:        new Audio('Assets/SoundFX/boost.wav'),
+  clear1:       new Audio('Assets/SoundFX/clearobstacle.wav'),
+  clear2:       new Audio('Assets/SoundFX/clearobstacle2.wav'),
+  completeLevel:new Audio('Assets/SoundFX/completelevel.wav'),
+};
+SFX.grind.loop = true;
+
+// Global SFX mute state (persisted)
+let sfxMuted = localStorage.getItem('gs_sfx_muted') === '1';
+
+function playSound(a) {
+  if (!a || sfxMuted) return;
+  try {
+    a.currentTime = 0;
+    a.play();
+  } catch (e) {
+    // Ignore autoplay errors; Telegram / browser may block until user input.
+  }
+}
+
+function playJumpSound() {
+  playSound(SFX.jump);
+}
+
+function playLandSound() {
+  playSound(SFX.land);
+}
+
+function playCrashSound() {
+  playSound(SFX.crash);
+}
+
+function playBoostSound() {
+  playSound(SFX.boost);
+}
+
+function playSelectSound() {
+  playSound(SFX.selectMenu);
+}
+
+function playClearObstacleSound() {
+  const choice = Math.random() < 0.5 ? SFX.clear1 : SFX.clear2;
+  playSound(choice);
+}
+
+function playCompleteLevelSound() {
+  playSound(SFX.completeLevel);
+}
+
+function startGrindSound() {
+  // Avoid restarting the loop if it's already playing.
+  if (SFX.grind && SFX.grind.paused) playSound(SFX.grind);
+}
+
+function stopGrindSound() {
+  if (!SFX.grind) return;
+  try {
+    SFX.grind.pause();
+    SFX.grind.currentTime = 0;
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Expose rail sound helpers so player.js can stop the loop when jumping off a rail.
+window.startGrindSound = startGrindSound;
+window.stopGrindSound = stopGrindSound;
+
 const API_URL = 'https://distribute-acquire-floating-wage.trycloudflare.com';
 let isDailyRun = false;
 let dailyDate = null;
@@ -351,6 +426,7 @@ function startRun(modeId) {
   }
   keysDown.clear();
   touchKeys.clear();
+  if (typeof playSelectSound === 'function') playSelectSound();
   player.reset();
   obsMgr.reset();
   if (currentMode === 'tutorial') obsMgr.tutorialMode = true;
@@ -370,6 +446,7 @@ function onTouchStart(e) {
       if (btn && btn.style.display !== 'none') {
         const br = btn.getBoundingClientRect();
         if (t.clientX >= br.left && t.clientX <= br.right && t.clientY >= br.top && t.clientY <= br.bottom) {
+          if (typeof playSelectSound === 'function') playSelectSound();
           startDailyRun();
           return;
         }
@@ -437,6 +514,7 @@ canvas.addEventListener('mousedown', e => {
     if (btn && btn.style.display !== 'none') {
       const br = btn.getBoundingClientRect();
       if (e.clientX >= br.left && e.clientX <= br.right && e.clientY >= br.top && e.clientY <= br.bottom) {
+        if (typeof playSelectSound === 'function') playSelectSound();
         startDailyRun();
         return;
       }
@@ -497,9 +575,11 @@ function trySpeedBoost() {
   speedMeter = 0;
   obsMgr.increaseSpeed();
   player.playBoostLurch();
+  if (typeof playBoostSound === 'function') playBoostSound();
   // In adventure mode, maxing out the speed level completes the round and advances stars.
   if (currentMode === 'adventure' && !gameOver && obsMgr.difficulty >= 25 && runStartTime != null) {
     adventureFinishedTime = (Date.now() - runStartTime) / 1000;
+    if (typeof playCompleteLevelSound === 'function') playCompleteLevelSound();
     gameOver = true;
     if (adventureStars < ADVENTURE_MAX_STARS) {
       adventureStars++;
@@ -679,7 +759,10 @@ function checkCollisions() {
 
       // If currently grinding this rail, check if we've reached the end
       if (player.activeRail === obs) {
-        if (player.right > obs.right) player.leaveRail();
+        if (player.right > obs.right) {
+          player.leaveRail();
+          if (typeof stopGrindSound === 'function') stopGrindSound();
+        }
         continue;
       }
 
@@ -690,6 +773,7 @@ function checkCollisions() {
             if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
             hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
             hearts--;
+            if (hearts > 0 && typeof playCrashSound === 'function') playCrashSound();
             if (hearts <= 0) {
               diedFromDamage = true;
               triggerGameOver();
@@ -697,6 +781,7 @@ function checkCollisions() {
           }
         } else {
           player.landOnRail(obs);
+          if (typeof startGrindSound === 'function') startGrindSound();
         }
       }
       continue;
@@ -714,6 +799,7 @@ function checkCollisions() {
         if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
         hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
         hearts--;
+        if (hearts > 0 && typeof playCrashSound === 'function') playCrashSound();
         if (hearts <= 0) {
           diedFromDamage = true;
           triggerGameOver();
@@ -726,6 +812,7 @@ function checkCollisions() {
         if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
         hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
         hearts--;
+        if (hearts > 0 && typeof playCrashSound === 'function') playCrashSound();
         if (hearts <= 0) {
           diedFromDamage = true;
           triggerGameOver();
@@ -743,6 +830,7 @@ function checkCollisions() {
       if (obsMgr.difficulty > 0) obsMgr.decreaseSpeed();
       hitInvincibleUntilTime = performance.now() + HIT_INVINCIBILITY_MS;
       hearts--;
+      if (hearts > 0 && typeof playCrashSound === 'function') playCrashSound();
       if (hearts <= 0) {
         diedFromDamage = true;
         triggerGameOver();
@@ -765,6 +853,7 @@ function triggerGameOver() {
   }
   if (isDailyRun) submitDailyScore(score);
   if (currentMode === 'endless' && runStartTime != null && !diedFromDamage) {
+    if (typeof playCompleteLevelSound === 'function') playCompleteLevelSound();
     endlessFinishedTime = (Date.now() - runStartTime) / 1000;
   }
   if (score > highScore) {
@@ -780,6 +869,7 @@ function loop(ts) {
   lastTime = ts;
 
   const dailyBtn = document.getElementById('dailyRunBtn');
+  const muteBtn  = document.getElementById('muteSfxBtn');
   const dailyMarker = document.getElementById('dailyRunMarker');
   const dailyMarkerBox = document.getElementById('dailyRunMarkerBox');
   const dailyMarkerText = document.getElementById('dailyRunMarkerText');
@@ -792,6 +882,19 @@ function loop(ts) {
         const yRatio = 0.30;
         dailyBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
         dailyBtn.style.left = (rect.left - wrap.left + rect.width / 2) + 'px';
+      }
+    }
+  }
+  if (muteBtn) {
+    muteBtn.style.display = startScreen ? 'block' : 'none';
+    muteBtn.textContent = sfxMuted ? 'SFX: OFF' : 'SFX: ON';
+    if (startScreen && canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const wrap = canvas.parentElement && canvas.parentElement.getBoundingClientRect();
+      if (wrap) {
+        const yRatio = 0.18;
+        muteBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
+        muteBtn.style.left = (rect.left - wrap.left + rect.width / 2) + 'px';
       }
     }
   }
@@ -938,10 +1041,12 @@ function loop(ts) {
         obs.scored = true;
         obs.clearFlashStart = performance.now();
         score++;
+        if (typeof playClearObstacleSound === 'function') playClearObstacleSound();
         if (currentMode === 'race') {
           raceObstaclesCleared++;
           if (raceObstaclesCleared >= 75) {
             raceCompletedTime = (Date.now() - raceStartTime) / 1000;
+            if (typeof playCompleteLevelSound === 'function') playCompleteLevelSound();
             gameOver = true;
             if (isDailyRun) {
               submitDailyScore(score);
@@ -1215,6 +1320,7 @@ window.addEventListener('keydown', e => {
   }
   if (startScreen) {
     // Keyboard: start the currently highlighted mode
+    if (typeof playSelectSound === 'function') playSelectSound();
     startRun(currentMode || 'endless');
     return;
   }
@@ -1240,6 +1346,7 @@ window.addEventListener('keydown', e => {
   const btn = document.getElementById('dailyRunBtn');
   if (btn) {
     function runDaily() {
+      if (typeof playSelectSound === 'function') playSelectSound();
       startDailyRun();
     }
     btn.addEventListener('click', runDaily);
@@ -1248,6 +1355,43 @@ window.addEventListener('keydown', e => {
       runDaily();
     }, { passive: false });
   }
+})();
+
+(function setupMuteSfxButton() {
+  let btn = document.getElementById('muteSfxBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'muteSfxBtn';
+    btn.type = 'button';
+    btn.style.position = 'absolute';
+    btn.style.zIndex = '10';
+    btn.style.transform = 'translateX(-50%)';
+    btn.style.padding = '6px 14px';
+    btn.style.fontFamily = 'monospace';
+    btn.style.fontSize = '11px';
+    btn.style.borderRadius = '6px';
+    btn.style.border = '2px solid #fff';
+    btn.style.background = 'rgba(0,0,0,0.7)';
+    btn.style.color = '#fff';
+    document.body.appendChild(btn);
+  }
+  function syncLabel() {
+    btn.textContent = sfxMuted ? 'SFX: OFF' : 'SFX: ON';
+  }
+  function toggleMute() {
+    sfxMuted = !sfxMuted;
+    localStorage.setItem('gs_sfx_muted', sfxMuted ? '1' : '0');
+    syncLabel();
+    if (sfxMuted && typeof stopGrindSound === 'function') {
+      stopGrindSound();
+    }
+  }
+  syncLabel();
+  btn.addEventListener('click', toggleMute);
+  btn.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    toggleMute();
+  }, { passive: false });
 })();
 
 requestAnimationFrame(loop);
