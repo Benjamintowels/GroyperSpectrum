@@ -214,7 +214,8 @@ function getModeButtons() {
   const centerX   = VIEW_W / 2 - btnW / 2;
   const columnStartY = 168;
   const buttons   = [];
-  const columnModes = [MODES.endless, MODES.adventure, MODES.race];
+  // Order: Race (top), Adventure (middle), Endless (bottom)
+  const columnModes = [MODES.race, MODES.adventure, MODES.endless];
   for (let i = 0; i < columnModes.length; i++) {
     const m = columnModes[i];
     buttons.push({
