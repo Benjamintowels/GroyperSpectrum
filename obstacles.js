@@ -303,6 +303,10 @@ class ObstacleManager {
     this.dailyMode       = false;
     this.dailyPattern    = null;
     this.dailyPatternIndex = 0;
+    // Cooldown window (in normalized frames) after leaving a rail during
+    // which we avoid spawning ground ceilings immediately, so the player
+    // has space to drop and duck.
+    this.ceilingRailCooldown = 0;
   }
 
   generateDailyPattern(seed) {
@@ -374,6 +378,14 @@ class ObstacleManager {
   // Base scroll speed; caps at 3.5 so levels past 10 stay playable
   get speed()    { return SCROLL_SPEED_MULT * Math.min(3.5, 0.8 + this.difficulty * 0.17); }
 
+  // Called when the player actually leaves a rail (see main.js collision logic).
+  // Starts a short cooldown window during which we refuse to spawn ground
+  // ceilings directly after the rail, ensuring there is room to duck.
+  noteRailEnd() {
+    const baseFrames = 70; // ~1.2s at 60fps; scaled by real dt via frameScale
+    this.ceilingRailCooldown = Math.max(this.ceilingRailCooldown, baseFrames);
+  }
+
   // Called when player cashes in a full meter (e.g. ArrowRight). Increases speed level; meter is cleared in main.
   increaseSpeed() {
     this.difficulty = Math.min(25, this.difficulty + 1);
@@ -406,6 +418,11 @@ class ObstacleManager {
     // Normalize time so logic based on the old \"per-frame\" values
     // stays consistent across refresh rates.
     const frameScale = dt / 16.67;
+    // Decay the "no ceiling right after rail" cooldown in normalized frames.
+    if (this.ceilingRailCooldown > 0) {
+      this.ceilingRailCooldown = Math.max(0, this.ceilingRailCooldown - frameScale);
+    }
+
     if (this.tutorialMode) {
       for (const o of this.obstacles) o.update(this.speed * frameScale);
       this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
@@ -461,6 +478,11 @@ class ObstacleManager {
             if (rail) {
               color = rail.color;
               options.onRail = true;
+            } else if (this.ceilingRailCooldown > 0) {
+              // During the post-rail cooldown, avoid ground ceilings in the
+              // daily pattern as well by converting them to a safer obstacle.
+              const altTypes = ['barrel', 'gate', 'gap'];
+              type = altTypes[Math.floor(Math.random() * altTypes.length)];
             }
           }
           this.obstacles.push(new Obstacle(type, color, options));
@@ -500,6 +522,7 @@ class ObstacleManager {
           }
         }
 
+        // Finalize ceiling behavior only after any rail logic / type swaps.
         if (type === 'ceiling') {
           const spawnX   = SPAWN_X;
           const ceilingW = 64;
@@ -508,6 +531,11 @@ class ObstacleManager {
           if (rail) {
             color   = rail.color;
             options = { onRail: true };
+          } else if (this.ceilingRailCooldown > 0) {
+            // Right after leaving a rail, convert would-be ground ceilings
+            // into a different obstacle so there is always some buffer.
+            const altTypes = ['barrel', 'gate', 'gap'];
+            type = altTypes[Math.floor(Math.random() * altTypes.length)];
           } else {
             const lastRail = [...this.obstacles].reverse().find(o => o.type === 'rail');
             if (lastRail && lastRail.right > -100) {

@@ -777,6 +777,9 @@ function checkCollisions() {
         if (player.right > obs.right) {
           player.leaveRail();
           if (typeof stopGrindSound === 'function') stopGrindSound();
+          // After leaving a rail, tell the obstacle manager so it can
+          // enforce a short cooldown before spawning ground ceilings.
+          if (typeof obsMgr.noteRailEnd === 'function') obsMgr.noteRailEnd();
         }
         continue;
       }
