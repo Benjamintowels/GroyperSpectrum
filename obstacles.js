@@ -268,7 +268,13 @@ class Obstacle {
 
   playerSurvives(player) {
     const colorOk = player.color === this.color;
-    if (this.type === 'barrel')  return player.state === 'jump' && colorOk;
+    // Barrels: player survives if they are the correct color AND either:
+    // - in a jump, or
+    // - currently using the duck-sized hitbox (including while cancelling a jump).
+    //
+    // This lets the player safely cancel a jump and duck on a matching-color
+    // barrel without taking damage.
+    if (this.type === 'barrel')  return colorOk && (player.state === 'jump' || player.isDucking);
     // Allow ceilings to be cleared either while in the dedicated duck state
     // (classic ground/rail duck) or while using the duck-sized hitbox during
     // a fall/cancel (player.isDucking).
