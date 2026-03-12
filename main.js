@@ -584,6 +584,9 @@ if (!Number.isFinite(adventureStars)) adventureStars = 0;
 if (adventureStars < 0) adventureStars = 0;
 if (adventureStars > ADVENTURE_MAX_STARS) adventureStars = ADVENTURE_MAX_STARS;
 let adventurePromptUntil = 0;
+// One-time "all colors unlocked" celebration prompt on the start menu.
+let adventureAllColorsPromptSeen = localStorage.getItem('gs_adventure_allcolors_prompt_seen') === '1';
+let showAdventureAllColorsPrompt = !adventureAllColorsPromptSeen && adventureStars >= ADVENTURE_MAX_STARS;
 
 function trySpeedBoost() {
   if (gameOver || startScreen || speedMeter < METER_MAX) return false;
@@ -597,8 +600,12 @@ function trySpeedBoost() {
     if (typeof playCompleteLevelSound === 'function') playCompleteLevelSound();
     gameOver = true;
     if (adventureStars < ADVENTURE_MAX_STARS) {
-      adventureStars++;
+      const prevStars = adventureStars;
+      adventureStars = Math.min(adventureStars + 1, ADVENTURE_MAX_STARS);
       localStorage.setItem('gs_adventure_stars', String(adventureStars));
+      if (adventureStars === ADVENTURE_MAX_STARS && prevStars < ADVENTURE_MAX_STARS && !adventureAllColorsPromptSeen) {
+        showAdventureAllColorsPrompt = true;
+      }
     }
   }
   return true;
@@ -1126,6 +1133,28 @@ function loop(ts) {
       ctx.textAlign = 'left';
     }
 
+    // Adventure all-colors celebration prompt on the start menu.
+    if (showAdventureAllColorsPrompt) {
+      ctx.save();
+      const boxW = 520;
+      const boxH = 64;
+      const boxX = (VIEW_W - boxW) / 2;
+      const boxY = 300;
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText('Take a screenshot for the Groyper Group!', VIEW_W / 2, boxY + 26);
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('PRESS ANY KEY TO DISMISS', VIEW_W / 2, boxY + 44);
+      ctx.restore();
+    }
+
     ctx.textAlign = 'left';
     requestAnimationFrame(loop);
     return;
@@ -1428,7 +1457,15 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (startScreen) {
-    // Keyboard: start the currently highlighted mode
+    // If the adventure all-colors celebration prompt is showing, any key just dismisses it.
+    if (showAdventureAllColorsPrompt) {
+      showAdventureAllColorsPrompt = false;
+      adventureAllColorsPromptSeen = true;
+      localStorage.setItem('gs_adventure_allcolors_prompt_seen', '1');
+      e.preventDefault();
+      return;
+    }
+    // Otherwise: keyboard starts the currently highlighted mode.
     if (typeof playSelectSound === 'function') playSelectSound();
     startRun(currentMode || 'endless');
     return;
