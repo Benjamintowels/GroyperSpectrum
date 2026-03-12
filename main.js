@@ -40,7 +40,18 @@ const SFX = {
 SFX.grind.loop = true;
 
 // Global SFX mute state (persisted)
-let sfxMuted = localStorage.getItem('gs_sfx_muted') === '1';
+// Default: muted (better for first-time players / browsers)
+let sfxMuted = (function() {
+  const stored = localStorage.getItem('gs_sfx_muted');
+  if (stored === null) return true;           // no preference yet → start muted
+  return stored === '1';                      // '1' = muted, '0' = unmuted
+})();
+
+// Global obstacle style toggle (persisted).
+// true  = use constructed high-contrast obstacle shapes
+// false = use pixel-art obstacle sprites
+let obstacleConstructedMode = localStorage.getItem('gs_obstacle_style') !== 'pixel';
+window.gs_useConstructedObstacles = obstacleConstructedMode;
 
 function playSound(a) {
   if (!a || sfxMuted) return;
@@ -308,8 +319,8 @@ function getModeButtons() {
   const centerX   = VIEW_W / 2 - btnW / 2;
   const columnStartY = 168;
   const buttons   = [];
-  // Order: Race (top), Adventure (middle), Endless (bottom)
-  const columnModes = [MODES.race, MODES.adventure, MODES.endless];
+  // Order: Adventure (top), Race (middle), Endless (bottom)
+  const columnModes = [MODES.adventure, MODES.race, MODES.endless];
   for (let i = 0; i < columnModes.length; i++) {
     const m = columnModes[i];
     buttons.push({
@@ -870,6 +881,7 @@ function loop(ts) {
 
   const dailyBtn = document.getElementById('dailyRunBtn');
   const muteBtn  = document.getElementById('muteSfxBtn');
+  const obstacleStyleBtn = document.getElementById('obstacleStyleBtn');
   const dailyMarker = document.getElementById('dailyRunMarker');
   const dailyMarkerBox = document.getElementById('dailyRunMarkerBox');
   const dailyMarkerText = document.getElementById('dailyRunMarkerText');
@@ -892,9 +904,26 @@ function loop(ts) {
       const rect = canvas.getBoundingClientRect();
       const wrap = canvas.parentElement && canvas.parentElement.getBoundingClientRect();
       if (wrap) {
+        // Position just above the obstacle-style toggle, in the same left column.
         const yRatio = 0.18;
+        const xRatio = 0.25;
         muteBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
-        muteBtn.style.left = (rect.left - wrap.left + rect.width / 2) + 'px';
+        muteBtn.style.left = (rect.left - wrap.left + rect.width * xRatio) + 'px';
+      }
+    }
+  }
+  if (obstacleStyleBtn) {
+    obstacleStyleBtn.style.display = startScreen ? 'block' : 'none';
+    obstacleStyleBtn.textContent = window.gs_useConstructedObstacles ? 'OBSTACLES: SIMPLE' : 'OBSTACLES: PIXEL';
+    if (startScreen && canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const wrap = canvas.parentElement && canvas.parentElement.getBoundingClientRect();
+      if (wrap) {
+        const yRatio = 0.24;
+        obstacleStyleBtn.style.top = (rect.top - wrap.top + rect.height * yRatio) + 'px';
+        // Position in the left half of the canvas, away from center-aligned buttons.
+        const xRatio = 0.25;
+        obstacleStyleBtn.style.left = (rect.left - wrap.left + rect.width * xRatio) + 'px';
       }
     }
   }
@@ -1391,6 +1420,40 @@ window.addEventListener('keydown', e => {
   btn.addEventListener('touchend', function(e) {
     e.preventDefault();
     toggleMute();
+  }, { passive: false });
+})();
+
+(function setupObstacleStyleButton() {
+  let btn = document.getElementById('obstacleStyleBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'obstacleStyleBtn';
+    btn.type = 'button';
+    btn.style.position = 'absolute';
+    btn.style.zIndex = '10';
+    btn.style.padding = '6px 14px';
+    btn.style.fontFamily = 'monospace';
+    btn.style.fontSize = '11px';
+    btn.style.borderRadius = '6px';
+    btn.style.border = '2px solid #fff';
+    btn.style.background = 'rgba(0,0,0,0.7)';
+    btn.style.color = '#fff';
+    document.body.appendChild(btn);
+  }
+  function syncLabel() {
+    btn.textContent = window.gs_useConstructedObstacles ? 'OBSTACLES: SIMPLE' : 'OBSTACLES: PIXEL';
+  }
+  function toggleObstacleStyle() {
+    obstacleConstructedMode = !obstacleConstructedMode;
+    window.gs_useConstructedObstacles = obstacleConstructedMode;
+    localStorage.setItem('gs_obstacle_style', obstacleConstructedMode ? 'construct' : 'pixel');
+    syncLabel();
+  }
+  syncLabel();
+  btn.addEventListener('click', toggleObstacleStyle);
+  btn.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    toggleObstacleStyle();
   }, { passive: false });
 })();
 

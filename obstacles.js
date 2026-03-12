@@ -21,11 +21,47 @@ BARREL_SPRITES.blue .src = 'Assets/Obstacles/BarrelBlue.png';
 BARREL_SPRITES.black.src = 'Assets/Obstacles/BarrelBlack.png';
 BARREL_SPRITES.white.src = 'Assets/Obstacles/BarrelWhite.png';
 
+// Ceiling sprites per color (fallbacks to rects if not yet loaded)
+const CEILING_SPRITES = {
+  green: new Image(),
+  blue:  new Image(),
+  black: new Image(),
+  white: new Image(),
+};
+
+CEILING_SPRITES.green.src = 'Assets/Obstacles/CeilingGreen.png';
+CEILING_SPRITES.blue .src = 'Assets/Obstacles/CeilingBlue.png';
+CEILING_SPRITES.black.src = 'Assets/Obstacles/CeilingBlack.png';
+CEILING_SPRITES.white.src = 'Assets/Obstacles/CeilingWhite.png';
+
+// Rail sprites per color (fallbacks to rects if not yet loaded)
+const RAIL_SPRITES = {
+  green: new Image(),
+  blue:  new Image(),
+  black: new Image(),
+  white: new Image(),
+};
+
+RAIL_SPRITES.green.src = 'Assets/Obstacles/RailGreen.png';
+RAIL_SPRITES.blue .src = 'Assets/Obstacles/RailBlue.png';
+RAIL_SPRITES.black.src = 'Assets/Obstacles/RailBlack.png';
+RAIL_SPRITES.white.src = 'Assets/Obstacles/RailWhite.png';
+
 const RAIL_HEIGHT       = 8;
 const RAIL_Y            = GROUND_Y - P_H;
 const SCROLL_SPEED_MULT = 7; // base scroll speed multiplier
 
 const CLEAR_FLASH_DURATION_MS = 400;
+
+// Returns true when the game should use the high-contrast constructed
+// obstacle shapes instead of the pixel-art sprites. Default is true;
+// main.js can override this via window.gs_useConstructedObstacles.
+function isConstructedObstacleStyle() {
+  if (typeof window !== 'undefined' && typeof window.gs_useConstructedObstacles === 'boolean') {
+    return window.gs_useConstructedObstacles;
+  }
+  return true;
+}
 
 function hexToRgb(hex) {
   hex = hex.slice(1);
@@ -102,6 +138,7 @@ class Obstacle {
   }
 
   draw(ctx) {
+    const useConstructed = isConstructedObstacleStyle();
     let c = COLORS_MAP[this.color];
     if (this.clearFlashStart != null && this.type !== 'gap') {
       const elapsed = performance.now() - this.clearFlashStart;
@@ -113,10 +150,11 @@ class Obstacle {
     if (this.type === 'barrel') {
       const img = BARREL_SPRITES[this.color];
       const drawY = this.y + 5; // visual offset only; hitbox unchanged
-      if (img && img.complete && img.naturalWidth) {
+      const canDrawSprite = img && img.complete && img.naturalWidth;
+      if (!useConstructed && canDrawSprite) {
         ctx.drawImage(img, this.x, drawY, this.w, this.h);
       } else {
-        // Fallback: original rect-style barrel if image not ready
+        // High-visibility constructed barrel.
         ctx.fillStyle = c;
         ctx.fillRect(this.x, drawY, this.w, this.h);
         ctx.strokeStyle = 'rgba(0,0,0,0.4)';
@@ -134,19 +172,31 @@ class Obstacle {
     }
 
     if (this.type === 'ceiling') {
-      ctx.fillStyle = c;
-      ctx.fillRect(this.x, this.y, this.w, this.h);
-      const n = 4, tw = this.w / n;
-      for (let i = 0; i < n; i++) {
-        ctx.beginPath();
-        ctx.moveTo(this.x + i * tw,        this.y + this.h);
-        ctx.lineTo(this.x + i * tw + tw/2, this.y + this.h + 12);
-        ctx.lineTo(this.x + (i+1) * tw,    this.y + this.h);
-        ctx.fill();
+      const img = CEILING_SPRITES[this.color];
+      const hasImg = img && img.complete && img.naturalWidth;
+      if (!useConstructed && hasImg) {
+        ctx.drawImage(img, this.x, this.y, this.w, this.h);
+        // Preserve clear-flash cue by overlaying a tinted rect when active
+        if (this.clearFlashStart != null) {
+          ctx.fillStyle = c.replace('rgb', 'rgba').replace(')', ', 0.35)');
+          ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+      } else {
+        // High-visibility constructed ceiling.
+        ctx.fillStyle = c;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        const n = 4, tw = this.w / n;
+        for (let i = 0; i < n; i++) {
+          ctx.beginPath();
+          ctx.moveTo(this.x + i * tw,        this.y + this.h);
+          ctx.lineTo(this.x + i * tw + tw/2, this.y + this.h + 12);
+          ctx.lineTo(this.x + (i+1) * tw,    this.y + this.h);
+          ctx.fill();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
       }
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(this.x, this.y, this.w, this.h);
     }
 
     if (this.type === 'gate') {
@@ -163,22 +213,30 @@ class Obstacle {
     }
 
     if (this.type === 'rail') {
-      ctx.fillStyle = c;
-      ctx.fillRect(this.x, this.y, this.w, this.h);
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(this.x, this.y, this.w, 2);
-      ctx.fillStyle = COLORS_MAP[this.color];
-      ctx.globalAlpha = 0.5;
-      const postCount = 4;
-      const spacing   = this.w / postCount;
-      for (let i = 0; i < postCount; i++) {
-        const px = this.x + i * spacing + spacing / 2;
-        ctx.fillRect(px - 2, this.y + this.h, 4, GROUND_Y - this.y - this.h);
+      const img = RAIL_SPRITES[this.color];
+      const hasImg = img && img.complete && img.naturalWidth;
+      if (!useConstructed && hasImg) {
+        // Pixel-art rail sprite stretched to this rail segment.
+        ctx.drawImage(img, this.x, this.y, this.w, this.h);
+      } else {
+        // High-visibility constructed rail with posts.
+        ctx.fillStyle = c;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(this.x, this.y, this.w, 2);
+        ctx.fillStyle = COLORS_MAP[this.color];
+        ctx.globalAlpha = 0.5;
+        const postCount = 4;
+        const spacing   = this.w / postCount;
+        for (let i = 0; i < postCount; i++) {
+          const px = this.x + i * spacing + spacing / 2;
+          ctx.fillRect(px - 2, this.y + this.h, 4, GROUND_Y - this.y - this.h);
+        }
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
       }
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(this.x, this.y, this.w, this.h);
     }
 
     if (this.type === 'gap') {

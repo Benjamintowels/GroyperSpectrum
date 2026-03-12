@@ -124,9 +124,11 @@ class Background {
     // Default: 0.3px at speed level 0.
     // Far City buildings: +0.5 blur per speed level.
     // Front buildings:    +0.3 blur per speed level.
+    // Dark wall band:     +0.1 blur per speed level.
     const level = typeof speedLevel === 'number' ? Math.max(0, speedLevel) : 0;
     const cityBlur = 0.3 + 0.5 * level;
     const frontBlur = 0.3 + 0.3 * level;
+    const wallBlur = 0.3 + 0.1 * level;
 
     // Far background buildings (city skyline) — tile indices are
     // stable in world space so buildings only leave when fully off-screen.
@@ -206,6 +208,8 @@ class Background {
       const tileW = DARK_WALL.naturalWidth * scale;
       const tileH = bandHeight;
       if (tileW > 0) {
+        ctx.save();
+        ctx.filter = `blur(${wallBlur}px)`;
         const offset = -((this.wallScroll % tileW) + tileW) % tileW;
         let x = offset - tileW;
         while (x < w + tileW) {
@@ -216,6 +220,7 @@ class Background {
           );
           x += tileW;
         }
+        ctx.restore();
       }
     } else {
       // Fallback: solid black band if texture isn't ready yet.
