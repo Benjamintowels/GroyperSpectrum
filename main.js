@@ -73,8 +73,8 @@ function playSelectSound() {
 }
 
 function playClearObstacleSound() {
-  const choice = Math.random() < 0.5 ? SFX.clear1 : SFX.clear2;
-  playSound(choice);
+  // Use only the primary obstacle-complete sound for all clears.
+  playSound(SFX.clear1);
 }
 
 function playCompleteLevelSound() {
