@@ -795,7 +795,8 @@ function loop(ts) {
 
   if (startScreen) {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    bg.draw(ctx);
+    // On the start screen, use a gentle default blur (speed level 0).
+    bg.draw(ctx, 0);
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
@@ -900,7 +901,8 @@ function loop(ts) {
   // Raise the game world slightly so UI buttons don't block the character
   ctx.save();
   ctx.translate(0, -10);
-  bg.draw(ctx);
+  // During gameplay, tie background blur to current speed level (difficulty).
+  bg.draw(ctx, obsMgr.difficulty || 0);
   obsMgr.draw(ctx);
   if (performance.now() < hitInvincibleUntilTime) {
     ctx.save();

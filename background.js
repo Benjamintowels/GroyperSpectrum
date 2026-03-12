@@ -28,12 +28,27 @@ const FRONT_BUILDINGS = FRONT_BUILDING_SOURCES.map(src => {
   return img;
 });
 
+// Foreground grass strip in front of front buildings
+const GRASS_FRONT = new Image();
+GRASS_FRONT.src = 'Assets/BG/GrassFront.png';
+
+// Dark wall texture used for the foreground contrast band.
+const DARK_WALL = new Image();
+DARK_WALL.src = 'Assets/BG/DarkWall.png';
+
+// Vertical baseline for all scrolling bg elements (top of contrast band).
+const BG_BASE_Y = 163;
+// How far the DarkWall band extends above BG_BASE_Y so it overlaps the grass (removes black strip).
+const WALL_OVERLAP_ABOVE = 50;
+
 class Background {
   constructor() {
     // Logical scroll positions (unbounded) so we can derive
-    // deterministic "random" building layouts per tile.
+    // deterministic "random" building layouts per tile without hops.
     this.bgScroll = 0;
     this.mgScroll = 0;
+    this.grassScroll = 0;
+    this.wallScroll = 0;
     this.bgX = 0;
     this.mgX = 0;
     this.fgX = 0;
@@ -46,14 +61,17 @@ class Background {
 
   update(speed) {
     const tileW = 800; // width of one background tile
-    this.bgScroll -= speed * 0.2;
-    this.mgScroll -= speed * 0.55;
-    this.bgX = this.bgScroll % tileW;
-    this.mgX = this.mgScroll % tileW;
+    // Scroll forward (positive) and derive tile positions in draw()
+    this.bgScroll += speed * 0.2;
+    this.mgScroll += speed * 0.55;
+    this.grassScroll += speed * 0.8;
+    this.wallScroll += speed * 1.0;  // faster than grass so wall reads in front
+    this.bgX = 0;
+    this.mgX = 0;
     this.fgX = (this.fgX - speed) % tileW;
   }
 
-  draw(ctx) {
+  draw(ctx, speedLevel) {
     const w = ctx.canvas ? ctx.canvas.width : 800;
 
     // Normalized sunrise progress 0..1 based on real time
@@ -101,29 +119,109 @@ class Background {
     ctx.restore();
 
     const tileW = 800;
-    const tilesNeeded = Math.ceil(w / tileW) + 2;
 
-    // Far background buildings (city skyline)
+    // Blur so gameplay elements stand out.
+    // Default: 0.3px at speed level 0.
+    // Far City buildings: +0.5 blur per speed level.
+    // Front buildings:    +0.3 blur per speed level.
+    const level = typeof speedLevel === 'number' ? Math.max(0, speedLevel) : 0;
+    const cityBlur = 0.3 + 0.5 * level;
+    const frontBlur = 0.3 + 0.3 * level;
+
+    // Far background buildings (city skyline) — tile indices are
+    // stable in world space so buildings only leave when fully off-screen.
+    ctx.save();
+    ctx.filter = `blur(${cityBlur}px)`;
     ctx.fillStyle = '#181830';
-    for (let r = 0; r < tilesNeeded; r++) {
-      const ox = this.bgX + r * tileW;
-      const tileIndex = Math.floor(this.bgScroll / tileW) + r;
-      this._city(ctx, ox, tileIndex);
+    {
+      const scroll = this.bgScroll;
+      const firstTile = Math.floor((scroll - tileW) / tileW);
+      const lastTile = Math.floor((scroll + w) / tileW);
+      for (let i = firstTile; i <= lastTile; i++) {
+        const ox = i * tileW - scroll;
+        // Deterministic gaps so skyline occasionally disappears for a tile.
+        const rng = this._seededRng(2000 + i);
+        if (rng() < 0.35) continue;
+        this._city(ctx, ox, i);
+      }
+    }
+    ctx.restore();
+
+    // Midground / front buildings + foreground grass
+    ctx.save();
+    ctx.filter = `blur(${frontBlur}px)`;
+    ctx.fillStyle = '#101020';
+    {
+      const scroll = this.mgScroll;
+      const firstTile = Math.floor((scroll - tileW) / tileW);
+      const lastTile = Math.floor((scroll + w) / tileW);
+      for (let i = firstTile; i <= lastTile; i++) {
+        const ox = i * tileW - scroll;
+        // Deterministic gaps in front-building layer as well.
+        const rng = this._seededRng(3000 + i * 7);
+        if (rng() < 0.25) continue;
+        this._mid(ctx, ox, i);
+      }
     }
 
-    // Midground / front buildings
-    ctx.fillStyle = '#101020';
-    for (let r = 0; r < tilesNeeded; r++) {
-      const ox = this.mgX + r * tileW;
-      const tileIndex = Math.floor(this.mgScroll / tileW) + r;
-      this._mid(ctx, ox, tileIndex);
+    // Foreground grass, in front of front buildings but still behind gameplay.
+    // Draw as a continuous strip keyed directly to grassScroll so it never pops.
+    if (!GRASS_FRONT.complete || !GRASS_FRONT.naturalWidth) {
+      // Simple fallback strip if sprite is not yet loaded.
+      ctx.fillStyle = '#2a5a2a';
+      ctx.fillRect(0, BG_BASE_Y - 8, w, 8);
+    } else {
+      const scale = 0.2;
+      const gw = GRASS_FRONT.naturalWidth * scale;
+      const gh = GRASS_FRONT.naturalHeight * scale;
+      const baseY = BG_BASE_Y;
+      if (gw > 0) {
+        const span = gw;
+        const offset = -((this.grassScroll % span) + span) % span;
+        let x = offset - span;
+        while (x < w + span) {
+          const drawX = x;
+          const drawY = baseY - gh;
+          ctx.drawImage(GRASS_FRONT, drawX, drawY, gw, gh);
+          x += span;
+        }
+      }
     }
+
+    ctx.restore();
 
     // Ground gradually lightens with the sunrise
     const groundDark  = '#1a1a1a';
     const groundLight = '#3a301f';
     ctx.fillStyle = this._lerpColor(groundDark, groundLight, t);
     ctx.fillRect(0, 310, w, 90);
+
+    // High-contrast foreground band behind player/obstacles, in front of grass.
+    // Extends above BG_BASE_Y so DarkWall overlaps the grass and no black strip shows.
+    const bandTop = BG_BASE_Y - WALL_OVERLAP_ABOVE;
+    const bandHeight = 310 - bandTop; // down to ground line (y=310)
+    if (DARK_WALL.complete && DARK_WALL.naturalWidth && DARK_WALL.naturalHeight) {
+      // Scale DarkWall so its height exactly matches the band; tile and scroll (faster than grass).
+      const scale = bandHeight / DARK_WALL.naturalHeight;
+      const tileW = DARK_WALL.naturalWidth * scale;
+      const tileH = bandHeight;
+      if (tileW > 0) {
+        const offset = -((this.wallScroll % tileW) + tileW) % tileW;
+        let x = offset - tileW;
+        while (x < w + tileW) {
+          ctx.drawImage(
+            DARK_WALL,
+            0, 0, DARK_WALL.naturalWidth, DARK_WALL.naturalHeight,
+            x, bandTop, tileW, tileH
+          );
+          x += tileW;
+        }
+      }
+    } else {
+      // Fallback: solid black band if texture isn't ready yet.
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, bandTop, w, bandHeight);
+    }
 
     // Track edge line picks up a bit of warmth
     const lineStart = '#2c6b2c';
@@ -194,18 +292,19 @@ class Background {
         [645, 75, 52],
         [705, 95, 75],
       ];
-      for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+      for (const [x, h, w] of b) ctx.fillRect(ox + x, BG_BASE_Y - h, w, h);
       return;
     }
 
     const tileW = 800;
     const rng = this._seededRng(tileIndex);
     let xCursor = -40 + rng() * 60;
-    const baseY = 310;
+    const baseY = BG_BASE_Y;
 
     while (xCursor < tileW + 60) {
       const img = imgs[Math.floor(rng() * imgs.length)];
-      const scale = 0.9 + rng() * 0.3; // small variation in height/width
+      // Smaller scale for far background
+      const scale = 0.4 + rng() * 0.25;
       const w = img.naturalWidth * scale;
       const h = img.naturalHeight * scale;
       const drawX = ox + xCursor;
@@ -233,18 +332,19 @@ class Background {
         [710, 42, 33],
         [775, 48, 28],
       ];
-      for (const [x, h, w] of b) ctx.fillRect(ox + x, 310 - h, w, h);
+      for (const [x, h, w] of b) ctx.fillRect(ox + x, BG_BASE_Y - h, w, h);
       return;
     }
 
     const tileW = 800;
     const rng = this._seededRng(tileIndex * 101);
     let xCursor = -60 + rng() * 80;
-    const baseY = 310;
+    const baseY = BG_BASE_Y;
 
     while (xCursor < tileW + 80) {
       const img = imgs[Math.floor(rng() * imgs.length)];
-      const scale = 0.95 + rng() * 0.35;
+      // Slightly larger scale for nearer front buildings
+      const scale = 0.6 + rng() * 0.3;
       const w = img.naturalWidth * scale;
       const h = img.naturalHeight * scale;
       const drawX = ox + xCursor;
@@ -252,6 +352,34 @@ class Background {
       ctx.drawImage(img, drawX, drawY, w, h);
       const gap = 20 + rng() * 60;
       xCursor += w + gap;
+    }
+  }
+
+  _grass(ctx, ox, tileIndex) {
+    if (!GRASS_FRONT.complete || !GRASS_FRONT.naturalWidth) {
+      // Simple fallback strip if sprite is not yet loaded.
+      ctx.fillStyle = '#2a5a2a';
+      ctx.fillRect(ox, BG_BASE_Y - 8, 800, 8);
+      return;
+    }
+
+    const tileW = 800;
+    // Small deterministic horizontal offset variation per tile to avoid visible tiling seams.
+    const rng = this._seededRng(1000 + tileIndex * 13);
+    // Fixed vertical position so grass does not "pop" up/down between tiles.
+    const baseY = BG_BASE_Y;
+    // Scale down grass sprites by 10x.
+    const scale = 0.2;
+    const w = GRASS_FRONT.naturalWidth * scale;
+    const h = GRASS_FRONT.naturalHeight * scale;
+
+    // Repeat grass sprite across the tile width.
+    let xCursor = -w + rng() * 40;
+    while (xCursor < tileW + w) {
+      const drawX = ox + xCursor;
+      const drawY = baseY - h;
+      ctx.drawImage(GRASS_FRONT, drawX, drawY, w, h);
+      xCursor += w;
     }
   }
 }

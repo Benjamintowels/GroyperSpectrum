@@ -54,7 +54,7 @@ class Obstacle {
     if (type === 'barrel') {
       this.w = 32;
       // Slightly taller than player so barrels over rails always require a jump
-      this.h = Math.round(P_H * 1.1);
+      this.h = Math.round(P_H * 1.1) + 8;
       this.y = GROUND_Y - this.h;
     }
 
@@ -295,16 +295,22 @@ class ObstacleManager {
   }
 
   // Spawn interval in "ideal 60fps frames".
-  // At max difficulty (10) we keep 120 frames (current tight spacing).
-  // At start (0) we use 480 frames, and every +1 difficulty (~5 cleared obstacles)
-  // closes the gap slightly.
+  // Past level 5, minimum spacing increases so obstacles stay avoidable. After level 10, each
+  // speed increment greatly increases spacing.
   get interval() {
     const maxFrames = 480;   // easy start spacing
-    const minFrames = 120;   // hardest spacing (what you see now at high diff)
-    const steps     = 10;    // difficulty 0..10
-    const step      = (maxFrames - minFrames) / steps; // 36
-    const frames    = Math.max(minFrames, maxFrames - step * this.difficulty);
-    // Divide by speed multiplier so world-space spacing is based on frames.
+    let minFrames   = 120;   // default hardest spacing
+    const effectiveDiff = Math.min(10, this.difficulty);
+    if (effectiveDiff > 5) {
+      minFrames = 120 + (effectiveDiff - 5) * 24; // 144 at 6 → 240 at 10
+    }
+    const steps = 10;
+    const step  = (maxFrames - 120) / steps;
+    let frames  = Math.max(minFrames, maxFrames - step * effectiveDiff);
+    if (this.difficulty > 10) {
+      // After level 10: greatly space obstacles per speed increment
+      frames += (this.difficulty - 10) * 80;
+    }
     return frames / SCROLL_SPEED_MULT;
   }
 
@@ -319,12 +325,12 @@ class ObstacleManager {
     const mul    = minMul + (maxMul - minMul) * (r * r);
     return base * mul;
   }
-  // Base scroll speed, scaled up for a much faster game feel
-  get speed()    { return SCROLL_SPEED_MULT * Math.min(2.5, 0.8 + this.difficulty * 0.17); }
+  // Base scroll speed; caps at 3.5 so levels past 10 stay playable
+  get speed()    { return SCROLL_SPEED_MULT * Math.min(3.5, 0.8 + this.difficulty * 0.17); }
 
   // Called when player cashes in a full meter (e.g. ArrowRight). Increases speed level; meter is cleared in main.
   increaseSpeed() {
-    this.difficulty = Math.min(10, this.difficulty + 1);
+    this.difficulty = Math.min(25, this.difficulty + 1);
   }
 
   // Called when player presses Left Arrow; slows scroll by one notch.
