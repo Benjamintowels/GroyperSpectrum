@@ -112,23 +112,24 @@ class Obstacle {
 
     if (this.type === 'barrel') {
       const img = BARREL_SPRITES[this.color];
+      const drawY = this.y + 5; // visual offset only; hitbox unchanged
       if (img && img.complete && img.naturalWidth) {
-        ctx.drawImage(img, this.x, this.y, this.w, this.h);
+        ctx.drawImage(img, this.x, drawY, this.w, this.h);
       } else {
         // Fallback: original rect-style barrel if image not ready
         ctx.fillStyle = c;
-        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.fillRect(this.x, drawY, this.w, this.h);
         ctx.strokeStyle = 'rgba(0,0,0,0.4)';
         ctx.lineWidth = 2;
         [0.33, 0.66].forEach(f => {
           ctx.beginPath();
-          ctx.moveTo(this.x, this.y + this.h * f);
-          ctx.lineTo(this.x + this.w, this.y + this.h * f);
+          ctx.moveTo(this.x, drawY + this.h * f);
+          ctx.lineTo(this.x + this.w, drawY + this.h * f);
           ctx.stroke();
         });
         ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(this.x, this.y, this.w, this.h);
+        ctx.strokeRect(this.x, drawY, this.w, this.h);
       }
     }
 
