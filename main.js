@@ -214,7 +214,18 @@ const MODES = {
   },
 };
 
-let currentMode = 'endless';
+// Default selection is Adventure so new players are guided through it first.
+let currentMode = 'adventure';
+
+function isModeLocked(modeId) {
+  if (modeId === 'race')    return adventureStars < 1;
+  if (modeId === 'endless') return adventureStars < 2;
+  return false;
+}
+
+function isModeUnlocked(modeId) {
+  return !isModeLocked(modeId);
+}
 
 function getActiveMode() {
   return MODES[currentMode] || MODES.endless;
@@ -468,7 +479,13 @@ function onTouchStart(e) {
       }
       const pos = getTouchPos(t, rect);
       const m   = hitTestModeButton(pos.x, pos.y);
-      if (m) startRun(m);
+      if (m) {
+        if (isModeLocked(m)) {
+          startMenuPromptText = 'Must Beat Adventure Mode to unlock';
+        } else {
+          startRun(m);
+        }
+      }
     }
     return;
   }
@@ -486,6 +503,16 @@ function onTouchStart(e) {
     touchKeys.clear();
     player.reset();
     obsMgr.reset();
+    // Show one-time unlock prompts when returning to the start menu after Adventure progression.
+    if (!raceUnlockPromptSeen && adventureStars >= 1) {
+      startMenuPromptText = 'Race Mode Unlocked';
+      raceUnlockPromptSeen = true;
+      localStorage.setItem('gs_race_unlocked_prompt_seen', '1');
+    } else if (!endlessUnlockPromptSeen && adventureStars >= 2) {
+      startMenuPromptText = 'Endless Mode Unlocked';
+      endlessUnlockPromptSeen = true;
+      localStorage.setItem('gs_endless_unlocked_prompt_seen', '1');
+    }
     return;
   }
   const rect = canvas.getBoundingClientRect();
@@ -535,7 +562,13 @@ canvas.addEventListener('mousedown', e => {
       }
     }
     const m = hitTestModeButton(x, y);
-    if (m) startRun(m);
+    if (m) {
+      if (isModeLocked(m)) {
+        startMenuPromptText = 'Must Beat Adventure Mode to unlock';
+      } else {
+        startRun(m);
+      }
+    }
     return;
   }
   if (!gameOver && speedMeter >= METER_MAX && hitTestMeter(x, y)) trySpeedBoost();
@@ -587,6 +620,13 @@ let adventurePromptUntil = 0;
 // One-time "all colors unlocked" celebration prompt on the start menu.
 let adventureAllColorsPromptSeen = localStorage.getItem('gs_adventure_allcolors_prompt_seen') === '1';
 let showAdventureAllColorsPrompt = !adventureAllColorsPromptSeen && adventureStars >= ADVENTURE_MAX_STARS;
+
+// One-time unlock prompts for Race / Endless on returning to the start menu.
+let raceUnlockPromptSeen = localStorage.getItem('gs_race_unlocked_prompt_seen') === '1';
+let endlessUnlockPromptSeen = localStorage.getItem('gs_endless_unlocked_prompt_seen') === '1';
+
+// Generic start-menu prompt (locked-mode warning or unlock notifications).
+let startMenuPromptText = null;
 
 function trySpeedBoost() {
   if (gameOver || startScreen || speedMeter < METER_MAX) return false;
@@ -1075,8 +1115,12 @@ function loop(ts) {
     ctx.font = 'bold 1rem monospace';
     buttons.forEach(b => {
       const isActive = getActiveMode().id === b.modeId;
+      const locked   = isModeLocked(b.modeId);
       const isTutorial = b.modeId === 'tutorial';
-      if (isTutorial) {
+      if (locked) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.strokeStyle = '#555';
+      } else if (isTutorial) {
         ctx.fillStyle = isActive ? 'rgba(220,140,60,0.95)' : '#000';
         ctx.strokeStyle = isActive ? '#fc8' : '#fa6';
       } else {
@@ -1088,7 +1132,7 @@ function loop(ts) {
       ctx.roundRect(b.x, b.y, b.w, b.h, 8);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = locked ? 'rgba(255,255,255,0.5)' : '#fff';
       ctx.textAlign = 'center';
       ctx.fillText(b.label.toUpperCase(), b.x + b.w / 2, b.y + b.h / 2 + 4);
     });
@@ -1152,6 +1196,28 @@ function loop(ts) {
       ctx.font = 'bold 11px monospace';
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       ctx.fillText('PRESS ANY KEY TO DISMISS', VIEW_W / 2, boxY + 44);
+      ctx.restore();
+    }
+
+    // Generic start menu prompt (locked-mode message or unlock notification).
+    if (startMenuPromptText) {
+      ctx.save();
+      const boxW = 420;
+      const boxH = 56;
+      const boxX = (VIEW_W - boxW) / 2;
+      const boxY = 300;
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(startMenuPromptText, VIEW_W / 2, boxY + 24);
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('PRESS ANY KEY TO CONTINUE', VIEW_W / 2, boxY + 40);
       ctx.restore();
     }
 
@@ -1465,7 +1531,18 @@ window.addEventListener('keydown', e => {
       e.preventDefault();
       return;
     }
-    // Otherwise: keyboard starts the currently highlighted mode.
+    // If a generic start menu prompt is up, any key just dismisses it.
+    if (startMenuPromptText) {
+      startMenuPromptText = null;
+      e.preventDefault();
+      return;
+    }
+    // Otherwise: keyboard starts the currently highlighted mode, if unlocked.
+    if (isModeLocked(currentMode)) {
+      startMenuPromptText = 'Must Beat Adventure Mode to unlock';
+      e.preventDefault();
+      return;
+    }
     if (typeof playSelectSound === 'function') playSelectSound();
     startRun(currentMode || 'endless');
     return;
@@ -1485,6 +1562,16 @@ window.addEventListener('keydown', e => {
     touchKeys.clear();
     player.reset();
     obsMgr.reset();
+    // Show one-time unlock prompts when returning to the start menu after Adventure progression.
+    if (!raceUnlockPromptSeen && adventureStars >= 1) {
+      startMenuPromptText = 'Race Mode Unlocked';
+      raceUnlockPromptSeen = true;
+      localStorage.setItem('gs_race_unlocked_prompt_seen', '1');
+    } else if (!endlessUnlockPromptSeen && adventureStars >= 2) {
+      startMenuPromptText = 'Endless Mode Unlocked';
+      endlessUnlockPromptSeen = true;
+      localStorage.setItem('gs_endless_unlocked_prompt_seen', '1');
+    }
   }
 });
 
