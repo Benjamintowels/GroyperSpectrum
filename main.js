@@ -132,10 +132,29 @@ function getActiveMode() {
 
 // Used by player / obstacles so new modes only touch this config
 function getActiveColors() {
+  if (currentMode === 'adventure') {
+    // Adventure mode colors depend on star progression.
+    if (adventureStars <= 0) return ['green'];
+    if (adventureStars === 1) return ['green', 'blue'];
+    if (adventureStars === 2) return ['green', 'blue', 'black'];
+    return ['green', 'blue', 'black', 'white'];
+  }
   return getActiveMode().colors;
 }
 
 function getActiveColorKeyMap() {
+  if (currentMode === 'adventure') {
+    // Match key bindings to the currently unlocked colors.
+    if (adventureStars <= 0) return [['KeyA', 'green']];
+    if (adventureStars === 1) return [['KeyA', 'green'], ['KeyS', 'blue']];
+    if (adventureStars === 2) return [['KeyA', 'green'], ['KeyS', 'blue'], ['KeyD', 'black']];
+    return [
+      ['KeyA', 'green'],
+      ['KeyS', 'blue'],
+      ['KeyD', 'black'],
+      ['KeyF', 'white'],
+    ];
+  }
   return getActiveMode().keyMap;
 }
 
@@ -306,6 +325,7 @@ function startRun(modeId) {
   deathTimeSeconds = null;
   raceCompletedTime = null;
   endlessFinishedTime = null;
+  adventureFinishedTime = null;
   runStartTime = Date.now();
   if (currentMode === 'race') {
     raceStartTime = Date.now();
@@ -323,6 +343,11 @@ function startRun(modeId) {
     tutorialTargetScore = 0;
   } else {
     tutorialMode = false;
+  }
+  if (currentMode === 'adventure') {
+    adventurePromptUntil = Date.now() + 5000;
+  } else {
+    adventurePromptUntil = 0;
   }
   keysDown.clear();
   touchKeys.clear();
@@ -438,6 +463,7 @@ let raceStartTime = null;       // Date.now() when race started
 let raceObstaclesCleared = 0;   // 0..75
 let raceCompletedTime = null;  // seconds when finished 75
 let endlessFinishedTime = null;  // seconds when endless run ended (frozen for FINISHED screen)
+let adventureFinishedTime = null; // seconds when adventure run ended at max speed
 let speedMeter  = 0;  // 0–5; fills as you pass obstacles; cash in with ArrowRight (or tap meter when full)
 let hitInvincibleUntilTime = 0;  // performance.now() until which obstacle hits are ignored after a speed knock
 let hearts = 3;
@@ -458,11 +484,28 @@ let tutorialStepTimer  = 0;   // seconds of gameplay (not when paused)
 let tutorialTargetScore = 0;  // when in step 17, score to reach (score + 20) to complete
 let tutorialLastFailedBarrelRight = -999; // step 13: avoid spawning multiple barrels per failed one
 
+// Adventure mode progression and prompt
+const ADVENTURE_MAX_STARS = 4;
+let adventureStars = Number(localStorage.getItem('gs_adventure_stars') || 0);
+if (!Number.isFinite(adventureStars)) adventureStars = 0;
+if (adventureStars < 0) adventureStars = 0;
+if (adventureStars > ADVENTURE_MAX_STARS) adventureStars = ADVENTURE_MAX_STARS;
+let adventurePromptUntil = 0;
+
 function trySpeedBoost() {
   if (gameOver || startScreen || speedMeter < METER_MAX) return false;
   speedMeter = 0;
   obsMgr.increaseSpeed();
   player.playBoostLurch();
+  // In adventure mode, maxing out the speed level completes the round and advances stars.
+  if (currentMode === 'adventure' && !gameOver && obsMgr.difficulty >= 25 && runStartTime != null) {
+    adventureFinishedTime = (Date.now() - runStartTime) / 1000;
+    gameOver = true;
+    if (adventureStars < ADVENTURE_MAX_STARS) {
+      adventureStars++;
+      localStorage.setItem('gs_adventure_stars', String(adventureStars));
+    }
+  }
   return true;
 }
 
@@ -835,6 +878,26 @@ function loop(ts) {
       ctx.fillText(b.label.toUpperCase(), b.x + b.w / 2, b.y + b.h / 2 + 4);
     });
 
+    // Adventure mode progression stars to the right of its button.
+    const advBtn = buttons.find(b => b.modeId === 'adventure');
+    if (advBtn) {
+      const totalStars = ADVENTURE_MAX_STARS;
+      const filled = adventureStars;
+      const starSize = 16;
+      const spacing = 4;
+      const totalWidth = totalStars * starSize + (totalStars - 1) * spacing;
+      const startX = advBtn.x + advBtn.w + 20;
+      const centerY = advBtn.y + advBtn.h / 2 + 5;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 16px monospace';
+      for (let i = 0; i < totalStars; i++) {
+        const x = startX + i * (starSize + spacing);
+        const ch = i < filled ? '★' : '☆';
+        ctx.fillStyle = i < filled ? '#ffd700' : '#111';
+        ctx.fillText(ch, x, centerY);
+      }
+    }
+
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
@@ -972,6 +1035,25 @@ function loop(ts) {
     ctx.fillText(`SPEED ${obsMgr.difficulty + 1}`, r.x, r.y + r.h + 16);
   }
 
+  // Adventure-mode start prompt: brief on-screen hint
+  if (!startScreen && !gameOver && currentMode === 'adventure' && Date.now() < adventurePromptUntil) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const boxW = 320;
+    const boxH = 40;
+    const boxX = (VIEW_W - boxW) / 2;
+    const boxY = 60;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('Reach 26 Speed To Win)', VIEW_W / 2, boxY + 26);
+    ctx.restore();
+  }
+
   // Touch control overlay (left diamond = colors, right = up/down) — only on touch devices
   if (!startScreen && isTouchDevice) {
     const c = TOUCH.diamondCenter;
@@ -1086,6 +1168,20 @@ function loop(ts) {
       }
       ctx.font = 'bold 1rem monospace';
       ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2 + 76);
+    } else if (currentMode === 'adventure' && adventureFinishedTime != null) {
+      ctx.fillStyle = '#4f4';
+      ctx.font = 'bold 2.2rem monospace';
+      ctx.fillText('COMPLETE', VIEW_W / 2, VIEW_H / 2 - 36);
+      const t = adventureFinishedTime;
+      const m = Math.floor(t / 60);
+      const s = (t % 60).toFixed(2);
+      ctx.font = 'bold 1.2rem monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`Obstacles passed: ${score}`, VIEW_W / 2, VIEW_H / 2);
+      ctx.fillText(`Time: ${m}:${s.padStart(5, '0')}`, VIEW_W / 2, VIEW_H / 2 + 28);
+      ctx.font = 'bold 1rem monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('PRESS ANY BUTTON FOR MENU', VIEW_W / 2, VIEW_H / 2 + 72);
     } else if (currentMode === 'endless') {
       const elapsed = endlessFinishedTime != null ? endlessFinishedTime : 0;
       const m = Math.floor(elapsed / 60);

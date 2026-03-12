@@ -376,11 +376,5 @@ class Player {
       ctx.lineWidth   = 1.5;
       ctx.strokeRect(x, top, P_W, h);
     }
-
-    ctx.fillStyle   = '#fff';
-    ctx.font        = 'bold 9px monospace';
-    ctx.textAlign   = 'center';
-    ctx.fillText(this.state.toUpperCase(), x + P_W / 2, top - 6);
-    ctx.textAlign   = 'left';
   }
 }

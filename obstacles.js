@@ -190,20 +190,6 @@ class Obstacle {
       ctx.lineWidth = 1;
       ctx.strokeRect(this.x, this.y, this.w, this.h);
     }
-
-    // Debug label
-    const label = this.type === 'barrel' ? 'JMP'
-                : this.type === 'ceiling' ? 'DUK'
-                : this.type === 'gate'    ? 'CLR'
-                : this.type === 'gap'     ? 'GAP'
-                : 'RAIL';
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(this.x + this.w / 2 - 14, this.y - 20, 28, 14);
-    ctx.fillStyle = this.type === 'gap' ? '#888' : COLORS_MAP[this.color];
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, this.x + this.w / 2, this.y - 9);
-    ctx.textAlign = 'left';
   }
 
   overlaps(player) {
@@ -296,9 +282,10 @@ class ObstacleManager {
 
   // Spawn interval in "ideal 60fps frames".
   // Past level 5, minimum spacing increases so obstacles stay avoidable. After level 10, each
-  // speed increment greatly increases spacing.
+  // speed increment still increases spacing, but not as dramatically so higher speeds remain
+  // challenging.
   get interval() {
-    const maxFrames = 480;   // easy start spacing
+    const maxFrames = 360;   // slightly tighter start spacing
     let minFrames   = 120;   // default hardest spacing
     const effectiveDiff = Math.min(10, this.difficulty);
     if (effectiveDiff > 5) {
@@ -308,8 +295,9 @@ class ObstacleManager {
     const step  = (maxFrames - 120) / steps;
     let frames  = Math.max(minFrames, maxFrames - step * effectiveDiff);
     if (this.difficulty > 10) {
-      // After level 10: greatly space obstacles per speed increment
-      frames += (this.difficulty - 10) * 80;
+      // After level 10: slightly space obstacles per speed increment, capped at diff 20
+      const hiDiff = Math.min(this.difficulty, 20);
+      frames += (hiDiff - 10) * 10;
     }
     return frames / SCROLL_SPEED_MULT;
   }
